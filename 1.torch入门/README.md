@@ -12,41 +12,6 @@ import torch
 dir(torch.utils)
 ```
 
-#['ThroughputBenchmark',
-# '__builtins__',
-# '__cached__',
-# '__doc__',
-# '__file__',
-# '__loader__',
-# '__name__',
-# '__package__',
-# '__path__',
-# '__spec__',
-# '_contextlib',
-# '_crash_handler',
-# '_foreach_utils',
-# '_mode_utils',
-# '_osp',
-# '_python_dispatch',
-# '_pytree',
-# '_stats',
-# 'backcompat',
-#'backend_registration',
-# 'cmake_prefix_path',
-# 'cpp_backtrace',
-# 'data',
-# 'disable_minidumps',
-#'dlpack',
-# 'enable_minidumps',
-# 'enable_minidumps_on_exceptions',
-# 'get_cpp_backtrace',
-# 'hooks',
-# 'rename_privateuse1_backend',
-# 'set_module',
-# 'sys',
-# 'throughput_benchmark',
-# 'weak']
-
 ```py
 help(Dataset)
 ``
