@@ -1,0 +1,2030 @@
+#!/usr/bin/env python3
+
+# Modules used by OntoVAE
+
+import numpy as np
+import torch
+from torch import optim
+import torch.nn as nn
+import torch.nn.functional as F
+
+###-------------------------------------------------------------###
+##                       ENCODER CLASS                           ##
+###-------------------------------------------------------------###
+
+class Encoder(nn.Module):
+    """
+    This class constructs an Encoder module for a variational autoencoder.
+
+    Parameters
+    -------------
+    in_features: # of features that are used as input
+    layer_dims: list giving the dimensions of the hidden layers
+    latent_dim: latent dimension
+    drop: dropout rate, default is 0
+    z_drop: dropout rate for latent space, default is 0.5
+    """
+
+    def __init__(self, in_features, latent_dim, layer_dims=[512], drop=0, z_drop=0.5):
+        super(Encoder, self).__init__()
+
+        self.in_features = in_features
+        self.layer_dims = layer_dims
+        self.layer_nums = [layer_dims[i:i+2] for i in range(len(layer_dims)-1)]
+        self.latent_dim = latent_dim
+        self.drop = drop
+        self.z_drop = z_drop
+
+        self.encoder = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(self.in_features, self.layer_dims[0]),
+                    nn.BatchNorm1d(self.layer_dims[0]),
+                    nn.Dropout(p=self.drop),
+                    nn.ReLU()
+                )
+            ] +
+
+            [self.build_block(x[0], x[1]) for x in self.layer_nums] 
+        )
+
+        self.mu = nn.Sequential(
+            nn.Linear(self.layer_dims[-1], self.latent_dim),
+            nn.Dropout(p=self.z_drop)
+        )
+
+        self.logvar = nn.Sequential(
+            nn.Linear(self.layer_dims[-1], self.latent_dim),
+            nn.Dropout(p=self.z_drop)
+        )
+
+    def build_block(self, ins, outs):
+        return nn.Sequential(
+            nn.Linear(ins, outs),
+            nn.BatchNorm1d(outs),
+            nn.Dropout(p=self.drop),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+
+        # encoding
+        c = x
+        for layer in self.encoder:
+            c = layer(c)
+        #c = c.view(-1, 2, self.latent_dim)
+
+        # get 'mu' and 'log-var'
+        #mu = c[:, 0, :]
+        #log_var = c[:, 1, :]
+
+        mu = self.mu(c)
+        log_var = self.logvar(c)
+
+        return mu, log_var
+
+
+
+###-------------------------------------------------------------###
+##                       DECODER CLASS                           ##
+###-------------------------------------------------------------###
+
+
+
+class Decoder(nn.Module):
+    """
+    This class constructs a Decoder module for a variational autoencoder.
+
+    Parameters
+    -------------
+    in_features: # of features that are used as input
+    layer_dims: list giving the dimensions of the hidden layers
+    latent_dim: latent dimension, default is 128
+    dr: dropout rate, default is 0
+    """
+
+    def __init__(self, in_features, latent_dim, layer_dims=[512], drop=0):
+        super(Decoder, self).__init__()
+
+        self.in_features = in_features
+        self.layer_dims = layer_dims
+        self.layer_nums = [layer_dims[i:i+2] for i in range(len(layer_dims)-1)]
+        self.latent_dim = latent_dim
+        self.drop = drop
+
+        self.decoder = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(self.latent_dim, self.layer_dims[0]),
+                    nn.BatchNorm1d(self.layer_dims[0]),
+                    nn.Dropout(p=self.drop),
+                    nn.ReLU()
+                )
+            ] +
+
+            [self.build_block(x[0], x[1]) for x in self.layer_nums] +
+
+            [
+                nn.Sequential(
+                    nn.Linear(self.layer_dims[-1], self.in_features),
+                )
+            ]
+        )
+
+    def build_block(self, ins, outs):
+        return nn.Sequential(
+            nn.Linear(ins, outs),
+            nn.BatchNorm1d(outs),
+            nn.Dropout(p=self.drop),
+            nn.ReLU()
+        )
+
+    def forward(self, z):
+
+        # decoding
+        reconstruction = z
+
+        for layer in self.decoder:
+            reconstruction = layer(reconstruction)
+        
+        return reconstruction
+
+
+###-------------------------------------------------------------###
+##                     ONTO ENCODER CLASS                        ##
+###-------------------------------------------------------------###
+
+class OntoEncoder(nn.Module):
+    """
+    This class constructs a Encoder module that is structured like an ontology and following a DAG.
+
+    Parameters
+    --------------
+    in_features: # of features that are used as input
+    layer_dims: list of tuples that define in and out for each layer
+    mask_list: matrix for each layer transition, that determines which weights to zero out
+    drop: dropout rate, default is 0
+    z_drop: dropout rate for latent space, default is 0.5
+    """ 
+
+    def __init__(self, in_features, layer_dims, mask_list, drop=0, z_drop=0.5):
+        super(OntoEncoder, self).__init__()
+
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.in_features = in_features
+        self.layer_dims = layer_dims
+        self.layer_shapes = [(np.sum(self.layer_dims[:i+1]), self.layer_dims[i+1]) for i in range(len(self.layer_dims)-1)]
+        self.masks = []
+        for m in mask_list:
+            self.masks.append(m.to(self.device))
+        self.latent_dim = self.layer_dims[-1]
+        self.drop = drop
+        self.z_drop = z_drop
+
+        # Encoder
+        self.encoder = nn.ModuleList(
+
+            [self.build_block(x[0], x[1]) for x in self.layer_shapes[:-1]] 
+
+        ).to(self.device)
+
+        self.mu = nn.Sequential(
+            nn.Linear(self.layer_shapes[-1][0], self.latent_dim),
+            nn.Dropout(p=self.z_drop)
+        ).to(self.device)
+
+        self.logvar = nn.Sequential(
+            nn.Linear(self.layer_shapes[-1][0], self.latent_dim),
+            nn.Dropout(p=self.z_drop)
+        ).to(self.device)
+
+        # apply masks to zero out weights of non-existing connections
+        for i in range(len(self.encoder)):
+            self.encoder[i][0].weight.data = torch.mul(self.encoder[i][0].weight.data, self.masks[i])
+
+        # apply mask on latent space
+        self.mu[0].weight.data = torch.mul(self.mu[0].weight.data, self.masks[-1])
+        self.logvar[0].weight.data = torch.mul(self.logvar[0].weight.data, self.masks[-1])
+
+
+    def build_block(self, ins, outs):
+        return nn.Sequential(
+            nn.Linear(ins, outs),
+            nn.Dropout(p=self.drop)
+        )
+    
+
+    def forward(self, x):
+        
+        # encoding
+        out = x
+
+        for layer in self.encoder:
+            c = layer(out)
+            out = torch.cat((c, out), dim=1)
+
+        #c = c.view(-1, 2, self.latent_dim)
+
+        # get 'mu' and 'log-var'
+        #mu = lat[:, 0, :]
+        #log_var = lat[:, 1, :]
+
+        mu = self.mu(out)
+        log_var = self.logvar(out)
+
+        return mu, log_var
+
+
+
+###-------------------------------------------------------------###
+##                     ONTO DECODER CLASS                        ##
+###-------------------------------------------------------------###
+
+
+class OntoDecoder(nn.Module):
+    """
+    This class constructs a Decoder module that is structured like an ontology and following a DAG.
+  
+    Parameters
+    ---------------
+    in_features: # of features that are used as input
+    study_num: # of different studys that the samples belong to
+    layer_dims: list of tuples that define in and out for each layer
+    mask_list: matrix for each layer transition, that determines which weights to zero out
+    latent_dim: latent dimension
+    drop: dropout rate, default is 0
+    """ 
+
+    def __init__(self, in_features, layer_dims, mask_list, latent_dim, neuronnum=1, drop=0):
+        super(OntoDecoder, self).__init__()
+
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.in_features = in_features
+        self.layer_dims = np.hstack([layer_dims[:-1] * neuronnum, layer_dims[-1]])
+        self.layer_shapes = [(np.sum(self.layer_dims[:i+1]), self.layer_dims[i+1]) for i in range(len(self.layer_dims)-1)]
+        self.masks = []
+        for m in mask_list[0:-1]:
+            m = m.repeat_interleave(neuronnum, dim=0)
+            m = m.repeat_interleave(neuronnum, dim=1)
+            self.masks.append(m.to(self.device))
+        self.masks.append(mask_list[-1].repeat_interleave(neuronnum, dim=1).to(self.device))
+        self.latent_dim = latent_dim
+        self.drop = drop
+
+        # Decoder
+        self.decoder = nn.ModuleList(
+
+            [self.build_block(x[0], x[1]) for x in self.layer_shapes[:-1]] +
+
+            [
+                nn.Sequential(
+                    nn.Linear(self.layer_shapes[-1][0], self.in_features)#,
+                    #nn.Sigmoid()
+                )
+            ]
+            ).to(self.device)
+        
+        # apply masks to zero out weights of non-existent connections
+        for i in range(len(self.decoder)):
+            self.decoder[i][0].weight.data = torch.mul(self.decoder[i][0].weight.data, self.masks[i])
+
+        # make all weights in decoder positive
+        for i in range(len(self.decoder)):
+            self.decoder[i][0].weight.data = self.decoder[i][0].weight.data.clamp(0)
+
+    def build_block(self, ins, outs):
+        return nn.Sequential(
+            nn.Linear(ins, outs)#,
+            #nn.Dropout(p=self.drop),
+            #nn.Sigmoid()
+        )
+
+    def forward(self, z):
+
+        # decoding
+        out = z
+
+        for layer in self.decoder[:-1]:
+            c = layer(out)
+            out = torch.cat((c, out), dim=1)
+        reconstruction = self.decoder[-1](out)
+        
+        return reconstruction
+####################################################
+
+#!/usr/bin/env python3
+
+import sys
+import numpy as np
+import torch
+from torch import optim
+import torch.nn as nn
+import torch.nn.functional as F
+from tqdm import tqdm
+
+from .modules import Encoder, Decoder, OntoEncoder, OntoDecoder
+from .fast_data_loader import FastTensorDataLoader
+
+###-------------------------------------------------------------###
+##                  VAE WITH ONTOLOGY IN DECODER                 ##
+###-------------------------------------------------------------###
+
+class OntoVAE(nn.Module):
+    """
+    This class combines a normal encoder with an ontology structured decoder
+
+    Parameters
+    -------------
+    ontobj: instance of the class Ontobj(), containing a preprocessed ontology and the training data
+    dataset: which dataset to use for training
+    top_thresh: top threshold to tell which trimmed ontology to use
+    bottom_thresh: bottom_threshold to tell which trimmed ontology to use
+    neuronnum: number of neurons per term
+    drop: dropout rate, default is 0.2
+    z_drop: dropout rate for latent space, default is 0.5
+    """
+
+    def __init__(self, ontobj, dataset, top_thresh=1000, bottom_thresh=30, neuronnum=3, drop=0.2, z_drop=0.5):
+        super(OntoVAE, self).__init__()
+
+        if not str(top_thresh) + '_' + str(bottom_thresh) in ontobj.genes.keys():
+            sys.exit('Available trimming thresholds are: ' + ', '.join(list(ontobj.genes.keys())))
+
+        self.ontology = ontobj.description
+        self.top = top_thresh
+        self.bottom = bottom_thresh
+        self.genes = ontobj.genes[str(top_thresh) + '_' + str(bottom_thresh)]
+        self.in_features = len(self.genes)
+        self.mask_list = ontobj.masks[str(top_thresh) + '_' + str(bottom_thresh)]
+        self.mask_list = [torch.tensor(m, dtype=torch.float32) for m in self.mask_list]
+        self.layer_dims_dec =  np.array([self.mask_list[0].shape[1]] + [m.shape[0] for m in self.mask_list])
+        self.latent_dim = self.layer_dims_dec[0] * neuronnum
+        self.layer_dims_enc = [self.latent_dim]
+        self.neuronnum = neuronnum
+        self.drop = drop
+        self.z_drop = z_drop
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        # Encoder
+        self.encoder = Encoder(self.in_features,
+                                self.latent_dim,
+                                self.layer_dims_enc,
+                                self.drop,
+                                self.z_drop)
+
+        # Decoder
+        self.decoder = OntoDecoder(self.in_features,
+                                    self.layer_dims_dec,
+                                    self.mask_list,
+                                    self.latent_dim,
+                                    self.neuronnum,
+                                    self.drop)
+        
+        if not dataset in ontobj.data[str(top_thresh) + '_' + str(bottom_thresh)].keys():
+            sys.exit('Available datasets are: ' + ', '.join(list(ontobj.data[str(top_thresh) + '_' + str(bottom_thresh)].keys())))
+
+        self.X = ontobj.data[str(top_thresh) + '_' + str(bottom_thresh)][dataset]
+
+    def reparameterize(self, mu, log_var):
+        """
+        Parameters
+        -------------
+        mu: mean from the encoder's latent space
+        log_var: log variance from the encoder's latent space
+        """
+        sigma = torch.exp(0.5*log_var) 
+        eps = torch.randn_like(sigma) 
+        return mu + eps * sigma
+        
+    def get_embedding(self, x):
+        mu, log_var = self.encoder(x)
+        embedding = self.reparameterize(mu, log_var)
+        return embedding
+
+    def forward(self, x):
+        # encoding
+        mu, log_var = self.encoder(x)
+            
+        # sample from latent space
+        z = self.reparameterize(mu, log_var)
+        
+        # decoding
+        reconstruction = self.decoder(z)
+            
+        return reconstruction, mu, log_var
+
+    def vae_loss(self, reconstruction, mu, log_var, data, kl_coeff):
+        kl_loss = -0.5 * torch.sum(1. + log_var - mu.pow(2) - log_var.exp(), )
+        rec_loss = F.mse_loss(reconstruction, data, reduction="sum")
+        return torch.mean(rec_loss + kl_coeff*kl_loss)
+
+    def train_round(self, dataloader, lr, kl_coeff, optimizer):
+        """
+        Parameters
+        -------------
+        dataloader: pytorch dataloader instance with training data
+        lr: learning rate
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        optimizer: optimizer for training
+        """
+        # set to train mode
+        self.train()
+
+        # initialize running loss
+        running_loss = 0.0
+
+        # iterate over dataloader for training
+        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+
+            # move batch to device
+            data = data[0].to(self.device)
+            optimizer.zero_grad()
+
+            # forward step
+            reconstruction, mu, log_var = self.forward(data)
+            loss = self.vae_loss(reconstruction, mu, log_var, data, kl_coeff)
+            running_loss += loss.item()
+
+            # backward propagation
+            loss.backward()
+
+            # zero out gradients from non-existent connections
+            for i in range(len(self.decoder.decoder)):
+                self.decoder.decoder[i][0].weight.grad = torch.mul(self.decoder.decoder[i][0].weight.grad, self.decoder.masks[i])
+
+            # perform optimizer step
+            optimizer.step()
+
+            # make weights in Onto module positive
+            for i in range(len(self.decoder.decoder)):
+                self.decoder.decoder[i][0].weight.data = self.decoder.decoder[i][0].weight.data.clamp(0)
+
+        # compute avg training loss
+        train_loss = running_loss/len(dataloader)
+        return train_loss
+
+    def val_round(self, dataloader, kl_coeff):
+        """
+        Parameters
+        -------------
+        dataloader: pytorch dataloader instance with training data
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        """
+        # set to eval mode
+        self.eval()
+
+        # initialize running loss
+        running_loss = 0.0
+
+        with torch.no_grad():
+            # iterate over dataloader for validation
+            for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+
+                # move batch to device
+                data = data[0].to(self.device)
+
+                # forward step
+                reconstruction, mu, log_var = self.forward(data)
+                loss = self.vae_loss(reconstruction, mu, log_var,data, kl_coeff)
+                running_loss += loss.item()
+
+        # compute avg val loss
+        val_loss = running_loss/len(dataloader)
+        return val_loss
+
+    def train_model(self, modelpath, lr=1e-4, kl_coeff=1e-4, batch_size=128, epochs=300, log=True, **kwargs):
+        """
+        Parameters
+        -------------
+        modelpath: where to store the best model (full path with filename)
+        lr: learning rate
+        kl_coeff: Kullback Leibler loss coefficient
+        batch_size: size of minibatches
+        epochs: over how many epochs to train
+        log: whether run should be logged to neptune
+        **kwargs: pass the run here if log == True
+        """
+        # train-test split
+        indices = np.random.RandomState(seed=42).permutation(self.X.shape[0])
+        X_train_ind = indices[:round(len(indices)*0.8)]
+        X_val_ind = indices[round(len(indices)*0.8):]
+        X_train, X_val = self.X[X_train_ind,:], self.X[X_val_ind,:]
+
+        # convert train and val into torch tensors
+        X_train = torch.tensor(X_train, dtype=torch.float32)
+        X_val = torch.tensor(X_val, dtype=torch.float32)
+
+        # generate dataloaders
+        trainloader = FastTensorDataLoader(X_train, 
+                                       batch_size=batch_size, 
+                                       shuffle=True)
+        valloader = FastTensorDataLoader(X_val, 
+                                        batch_size=batch_size, 
+                                        shuffle=False)
+
+        val_loss_min = float('inf')
+        optimizer = optim.AdamW(self.parameters(), lr = lr)
+
+        for epoch in range(epochs):
+            print(f"Epoch {epoch+1} of {epochs}")
+            train_epoch_loss = self.train_round(trainloader, lr, kl_coeff, optimizer)
+            val_epoch_loss = self.val_round(valloader, kl_coeff)
+            
+            if log == True:
+                run = kwargs.get('run')
+                run["metrics/train/loss"].log(train_epoch_loss)
+                run["metrics/val/loss"].log(val_epoch_loss)
+                
+            if val_epoch_loss < val_loss_min:
+                print('New best model!')
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': val_epoch_loss,
+                }, modelpath)
+                val_loss_min = val_epoch_loss
+                
+            print(f"Train Loss: {train_epoch_loss:.4f}")
+            print(f"Val Loss: {val_epoch_loss:.4f}")
+
+
+    def _pass_data(self, data, output):
+        """
+        output
+            one of 'act': pathway activities
+                    'rec': reconstructed values
+        """
+
+        # set to eval mode
+        self.eval()
+
+        # get latent space embedding
+        with torch.no_grad():
+            z = self.get_embedding(data)
+            z = z.to('cpu').detach().numpy()
+        
+        z = np.array(np.split(z, z.shape[1]/self.neuronnum, axis=1)).mean(axis=2).T
+
+        # get activities from decoder
+        activation = {}
+        def get_activation(index):
+            def hook(model, input, output):
+                activation[index] = output.to('cpu').detach()
+            return hook
+
+        hooks = {}
+
+        for i in range(len(self.decoder.decoder)-1):
+            key = str(i)
+            value = self.decoder.decoder[i][0].register_forward_hook(get_activation(i))
+            hooks[key] = value
+        
+        with torch.no_grad():
+            reconstruction, _, _ = self.forward(data)
+
+        act = torch.cat(list(activation.values()), dim=1).numpy()
+        act = np.array(np.split(act, act.shape[1]/self.neuronnum, axis=1)).mean(axis=2).T
+        
+        # remove hooks
+        for h in hooks:
+            hooks[h].remove()
+
+        # return pathway activities or reconstructed gene values
+        if output == 'act':
+            return np.hstack((z,act))
+        if output == 'rec':
+            return reconstruction.to('cpu').detach().numpy()
+        
+
+    def get_pathway_activities(self, ontobj, dataset, **kwargs):
+        """
+        Parameters
+        -------------
+        ontobj: instance of the class Ontobj(), should be the same as the one used for model training
+        dataset: which dataset to use for pathway activity retrieval
+        **kwargs
+        terms: if we only want to get back the activities for certain terms (should be list of ids)
+        """
+        if self.ontology != ontobj.description:
+            sys.exit('Wrong ontology provided, should be ' + self.ontology)
+
+        data = ontobj.data[str(self.top) + '_' + str(self.bottom)][dataset].copy()
+
+        # convert data to tensor and move to device
+        data = torch.tensor(data, dtype=torch.float32).to(self.device)
+
+        # retireve pathway activities
+        act = self._pass_data(data, 'act')
+
+        # if term was specified, subset
+        if 'terms' in kwargs:
+            terms = kwargs.get('terms')
+            annot = ontobj.annot[str(self.top) + '_' + str(self.bottom)]
+            term_ind = annot[annot.ID.isin(terms)].index.to_numpy()
+
+            act = act[:,term_ind]
+
+        return act
+
+
+    def get_reconstructed_values(self, ontobj, dataset, **kwargs):
+        """
+        Parameters
+        -------------
+        ontobj: instance of the class Ontobj(), should be the same as the one used for model training
+        dataset: which dataset to use for pathway activity retrieval
+
+        **kwargs
+        rec_genes: if we only want to get back values for certain genes
+        """
+        if self.ontology != ontobj.description:
+            sys.exit('Wrong ontology provided, should be ' + self.ontology)
+
+        data = ontobj.data[str(self.top) + '_' + str(self.bottom)][dataset].copy()
+
+        # convert data to tensor and move to device
+        data = torch.tensor(data, dtype=torch.float32).to(self.device)
+
+        # retrieve pathway activities
+        rec = self._pass_data(data, 'rec')
+
+        # if genes were passed, subset
+        if 'rec_genes' in kwargs:
+            genes = kwargs.get('rec_genes')
+            onto_genes = ontobj.genes[str(self.top) + '_' + str(self.bottom)]
+            gene_ind = np.array([onto_genes.index(g) for g in genes])
+
+            rec = rec[:,gene_ind]
+
+        return rec
+
+        
+    def perturbation(self, ontobj, dataset, genes, values, output='terms', **kwargs):
+        """
+        This function retrieves pathway activities after performing in silico perturbation
+
+        Parameters
+        -------------
+        ontobj: instance of the class Ontobj(), should be the same as the one used for model training
+        dataset: which dataset to use for perturbation and pathway activity retrieval
+        genes: a list of genes to perturb
+        values: list with new values, same length as genes
+        output: 'terms' or 'genes'
+
+        **kwargs
+        terms: if we only want to get back the activities for certain terms (should be list of ids)
+        rec_genes: if we only want to get back values for certain reconstructed genes
+        """
+
+        if self.ontology != ontobj.description:
+            sys.exit('Wrong ontology provided, should be ' + self.ontology)
+
+        data = ontobj.data[str(self.top) + '_' + str(self.bottom)][dataset].copy()
+
+        # get indices of the genes in list
+        indices = [self.genes.index(g) for g in genes]
+
+        # replace their values
+        for i in range(len(genes)):
+            data[:,indices[i]] = values[i]
+
+        # convert data to tensor and move to device
+        data = torch.tensor(data, dtype=torch.float32).to(self.device)
+
+        # get pathway activities or reconstructed values after perturbation
+        if output == 'terms':
+            res = self._pass_data(data, 'act')
+        if output == 'genes':
+            res = self._pass_data(data, 'rec')
+
+        # if term was specified, subset
+        if 'terms' in kwargs:
+            terms = kwargs.get('terms')
+            annot = ontobj.annot[str(self.top) + '_' + str(self.bottom)]
+            term_ind = annot[annot.ID.isin(terms)].index.to_numpy()
+
+            res = res[:,term_ind]
+        
+        if 'rec_genes' in kwargs:
+            genes = kwargs.get('rec_genes')
+            onto_genes = ontobj.genes[str(self.top) + '_' + str(self.bottom)]
+            gene_ind = np.array([onto_genes.index(g) for g in genes])
+
+            res = res[:,gene_ind]
+
+        return res
+        
+
+
+
+
+
+###-------------------------------------------------------------###
+##               VAE WITH ONTOLOGY IN ENCODER                    ##
+###-------------------------------------------------------------###
+
+# This class has not been updated yet to work with an Ontoobj, so use carefully.
+
+class OntoEncVAE(nn.Module):
+    """
+    This class combines a an ontology structured encoder with a normal decoder
+
+    Parameters
+    -------------
+    in_features: # of features that are used as input
+    mask_list: matrix for each layer transition, that determines which weights to zero out
+    neuronnum: number of neurons per term
+    drop: dropout rate, default is 0
+    z_drop: dropout rate for latent space, default is 0.5
+    """
+
+    def __init__(self, onto, in_features, mask_list, neuronnum=1, drop=0, z_drop=0.5):
+        super(OntoEncVAE, self).__init__()
+
+        self.in_features = in_features
+        self.mask_list = [torch.tensor(m, dtype=torch.float32) for m in mask_list]
+        self.layer_dims_enc = np.array([mask_list[0].shape[1]] + [m.shape[0] for m in mask_list])
+        self.latent_dim = layer_dims_enc[-1] * neuronnum
+        self.layer_dims_dec = [self.latent_dim]
+        self.neuronnum = neuronnum
+        self.drop = drop
+        self.z_drop = z_drop
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        # Encoder
+        self.encoder = OntoEncoder(self.in_features,
+                                    self.layer_dims_enc,
+                                    self.mask_list,
+                                    self.drop,
+                                    self.z_drop)
+
+        # Decoder
+        self.decoder = Decoder(self.in_features,
+                                self.latent_dim,
+                                self.layer_dims_dec,
+                                self.drop)
+        
+    def reparameterize(self, mu, log_var):
+        """
+        Parameters
+        -------------
+        mu: mean from the encoder's latent space
+        log_var: log variance from the encoder's latent space
+        """
+        sigma = torch.exp(0.5*log_var) 
+        eps = torch.randn_like(sigma) 
+        return mu + eps * sigma
+        
+    def get_embedding(self, x):
+        mu, log_var = self.encoder(x)
+        embedding = self.reparameterize(mu, log_var)
+        return embedding
+
+    def forward(self, x):
+        # encoding
+        mu, log_var = self.encoder(x)
+            
+        # sample from latent space
+        z = self.reparameterize(mu, log_var)
+
+        # decoding
+        reconstruction = self.decoder(z)
+            
+        return reconstruction, mu, log_var
+
+    def vae_loss(self, reconstruction, mu, log_var, data, kl_coeff):
+        kl_loss = -0.5 * torch.sum(1. + log_var - mu.pow(2) - log_var.exp(), )
+        rec_loss = F.mse_loss(reconstruction, data, reduction="sum")
+        return torch.mean(rec_loss + kl_coeff*kl_loss)
+
+    def train_round(self, dataloader, lr, kl_coeff, optimizer):
+        """
+        Parameters
+        -------------
+        dataloader: pytorch dataloader instance with training data
+        lr: learning rate
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        optimizer: optimizer for training
+        """
+        # set to train mode
+        self.train()
+
+        # initialize running loss
+        running_loss = 0.0
+
+        # iterate over dataloader for training
+        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+
+            # move batch to device
+            data = data[0].to(self.device)
+            optimizer.zero_grad()
+
+            # forward step
+            reconstruction, mu, log_var = self.forward(data)
+            loss = self.vae_loss(reconstruction, mu, log_var, data, kl_coeff)
+            running_loss += loss.item()
+
+            # backward propagation
+            loss.backward()
+
+            # zero out gradients from non-existent connections
+            for i in range(len(self.encoder.encoder)):
+                self.encoder.encoder[i][0].weight.grad = torch.mul(self.encoder.encoder[i][0].weight.grad, self.encoder.masks[i])
+
+            # apply mask on latent space
+            self.encoder.mu[0].weight.grad = torch.mul(self.encoder.mu[0].weight.grad, self.encoder.masks[-1])
+            self.encoder.logvar[0].weight.grad = torch.mul(self.encoder.logvar[0].weight.grad, self.encoder.masks[-1])
+
+            # perform optimizer step
+            optimizer.step()
+
+            # make weights in Onto module positive
+            for i in range(len(self.encoder.encoder)):
+                self.encoder.encoder[i][0].weight.data = self.encoder.encoder[i][0].weight.data.clamp(0)
+            self.encoder.mu[0].weight.data = self.encoder.mu[0].weight.data.clamp(0)
+            self.encoder.logvar[0].weight.data = self.encoder.logvar[0].weight.data.clamp(0)
+
+        # compute avg training loss
+        train_loss = running_loss/len(dataloader)
+        return train_loss
+
+    def val_round(self, dataloader, kl_coeff):
+        """
+        Parameters
+        -------------
+        dataloader: pytorch dataloader instance with training data
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        """
+        # set to eval mode
+        self.eval()
+
+        # initialize running loss
+        running_loss = 0.0
+
+        with torch.no_grad():
+            # iterate over dataloader for validation
+            for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+
+                # move batch to device
+                data = data[0].to(self.device)
+
+                # forward step
+                reconstruction, mu, log_var = self.forward(data)
+                loss = self.vae_loss(reconstruction, mu, log_var,data, kl_coeff)
+                running_loss += loss.item()
+
+        # compute avg val loss
+        val_loss = running_loss/len(dataloader)
+        return val_loss
+
+    def train_model(self, trainloader, valloader, lr, kl_coeff, epochs, modelpath, log=True, **kwargs):
+        """
+        Parameters
+        -------------
+        trainloader: pytorch dataloader instance with training data
+        valloader: pytorch dataloader instance with validation data
+        lr: learning rate
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        epochs: number of epochs to train the model
+        modelpath: where to store the best model
+        log: if losses should be logged
+        **kwargs: pass the run here if log == True
+        """
+        val_loss_min = float('inf')
+        optimizer = optim.AdamW(self.parameters(), lr = lr)
+
+        for epoch in range(epochs):
+            print(f"Epoch {epoch+1} of {epochs}")
+            train_epoch_loss = self.train_round(trainloader, lr, kl_coeff, optimizer)
+            val_epoch_loss = self.val_round(valloader, kl_coeff)
+            
+            if log == True:
+                run = kwargs.get('run')
+                run["metrics/train/loss"].log(train_epoch_loss)
+                run["metrics/val/loss"].log(val_epoch_loss)
+                
+            if val_epoch_loss < val_loss_min:
+                print('New best model!')
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': val_epoch_loss,
+                }, modelpath)
+                val_loss_min = val_epoch_loss
+                
+            print(f"Train Loss: {train_epoch_loss:.4f}")
+            print(f"Val Loss: {val_epoch_loss:.4f}")
+
+
+    def get_pathway_activities(self, data):
+        """
+        Parameters
+        -------------
+        2D numpy array to be run through trained model
+        """
+
+        # convert data to tensor and move to device
+        data = torch.tensor(data, dtype=torch.float32).to(self.device)
+
+        # set to eval mode
+        self.eval()
+
+        # get latent space embedding
+        with torch.no_grad():
+            z = self.get_embedding(data)
+            z = z.to('cpu').detach().numpy()
+        
+        z = np.array(np.split(z, z.shape[1]/self.neuronnum, axis=1)).mean(axis=2).T
+
+        # get activities from decoder
+        activation = {}
+        def get_activation(index):
+            def hook(model, input, output):
+                activation[index] = output.to('cpu').detach()
+            return hook
+
+        hooks = {}
+
+        for i in range(len(self.encoder.encoder)-1):
+            key = 'Dec' + str(i)
+            value = self.encoder.encoder[i][0].register_forward_hook(get_activation(i))
+            hooks[key] = value
+        
+        with torch.no_grad():
+            reconstruction, _, _ = self.forward(data)
+
+        act = torch.cat(list(activation.values()), dim=1).detach().numpy()
+        act = np.array(np.split(act, act.shape[1]/self.neuronnum, axis=1)).mean(axis=2).T
+
+        # stack and return
+        return np.hstack((z,act))
+
+
+
+
+###-------------------------------------------------------------###
+##                              VAE                              ##
+###-------------------------------------------------------------###
+
+class VAE(nn.Module):
+    """
+    This class defines a standard VAE without ontology.
+
+    Parameters
+    -------------
+    in_features: # of features that are used as input
+    layer_dims_enc: list giving the dimensions of the layers in the encoder
+    layer_dims_dec: list giving the dimensions of the layers in the decoder
+    drop: dropout rate, default is 0
+    z_drop: dropout rate for latent space, default is 0.5
+    """
+
+    def __init__(self, in_features, layer_dims_enc=[1000], layer_dims_dec=[1000], latent_dim=500, drop=0, z_drop=0.5):
+        super(VAE, self).__init__()
+
+        self.in_features = in_features
+        self.layer_dims_enc = layer_dims_enc
+        self.layer_dims_dec = layer_dims_dec
+        self.latent_dim = latent_dim
+        self.drop = drop
+        self.z_drop = z_drop
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        # Encoder
+        self.encoder = Encoder(self.in_features,
+                                self.latent_dim,
+                                self.layer_dims_enc,
+                                self.drop,
+                                self.z_drop)
+        
+        # Decoder
+        self.decoder = Decoder(self.in_features,
+                                self.latent_dim,
+                                self.layer_dims_dec,
+                                self.drop)
+
+        
+    def reparameterize(self, mu, log_var):
+        """
+        Parameters
+        -------------
+        mu: mean from the encoder's latent space
+        log_var: log variance from the encoder's latent space
+        """
+        sigma = torch.exp(0.5*log_var) 
+        eps = torch.randn_like(sigma) 
+        return mu + eps * sigma
+        
+    def get_embedding(self, x):
+        mu, log_var = self.encoder(x)
+        embedding = self.reparameterize(mu, log_var)
+        return embedding
+
+    def forward(self, x):
+        # encoding
+        mu, log_var = self.encoder(x)
+            
+        # sample from latent space
+        z = self.reparameterize(mu, log_var)
+
+        # decoding
+        reconstruction = self.decoder(z)
+            
+        return reconstruction, mu, log_var
+
+    def vae_loss(self, reconstruction, mu, log_var, data, kl_coeff):
+        kl_loss = -0.5 * torch.sum(1. + log_var - mu.pow(2) - log_var.exp(), )
+        rec_loss = F.mse_loss(reconstruction, data, reduction="sum")
+        return torch.mean(rec_loss + kl_coeff*kl_loss)
+
+    def train_round(self, dataloader, lr, kl_coeff, optimizer):
+        """
+        Parameters
+        -------------
+        dataloader: pytorch dataloader instance with training data
+        lr: learning rate
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        optimizer: optimizer for training
+        """
+        # set to train mode
+        self.train()
+
+        # initialize running loss
+        running_loss = 0.0
+
+        # iterate over dataloader for training
+        for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+
+            # move batch to device
+            data = data[0].to(self.device)
+            optimizer.zero_grad()
+
+            # forward step
+            reconstruction, mu, log_var = self.forward(data)
+            loss = self.vae_loss(reconstruction, mu, log_var, data, kl_coeff)
+            running_loss += loss.item()
+
+            # backward propagation
+            loss.backward()
+
+            # perform optimizer step
+            optimizer.step()
+
+        # compute avg training loss
+        train_loss = running_loss/len(dataloader)
+        return train_loss
+
+    def val_round(self, dataloader, kl_coeff):
+        """
+        Parameters
+        -------------
+        dataloader: pytorch dataloader instance with training data
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        """
+        # set to eval mode
+        self.eval()
+
+        # initialize running loss
+        running_loss = 0.0
+
+        with torch.no_grad():
+            # iterate over dataloader for validation
+            for i, data in tqdm(enumerate(dataloader), total=len(dataloader)):
+
+                # move batch to device
+                data = data[0].to(self.device)
+
+                # forward step
+                reconstruction, mu, log_var = self.forward(data)
+                loss = self.vae_loss(reconstruction, mu, log_var,data, kl_coeff)
+                running_loss += loss.item()
+
+        # compute avg val loss
+        val_loss = running_loss/len(dataloader)
+        return val_loss
+
+    def train_model(self, trainloader, valloader, lr, kl_coeff, epochs, modelpath, log=True, **kwargs):
+        """
+        Parameters
+        -------------
+        trainloader: pytorch dataloader instance with training data
+        valloader: pytorch dataloader instance with validation data
+        lr: learning rate
+        kl_coeff: coefficient for weighting Kullback-Leibler loss
+        epochs: number of epochs to train the model
+        modelpath: where to store the best model
+        log: if losses should be logged
+        **kwargs: pass the run here if log == True
+        """
+        val_loss_min = float('inf')
+        optimizer = optim.AdamW(self.parameters(), lr = lr)
+
+        for epoch in range(epochs):
+            print(f"Epoch {epoch+1} of {epochs}")
+            train_epoch_loss = self.train_round(trainloader, lr, kl_coeff, optimizer)
+            val_epoch_loss = self.val_round(valloader, kl_coeff)
+            
+            if log == True:
+                run = kwargs.get('run')
+                run["metrics/train/loss"].log(train_epoch_loss)
+                run["metrics/val/loss"].log(val_epoch_loss)
+                
+            if val_epoch_loss < val_loss_min:
+                print('New best model!')
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': val_epoch_loss,
+                }, modelpath)
+                val_loss_min = val_epoch_loss
+                
+            print(f"Train Loss: {train_epoch_loss:.4f}")
+            print(f"Val Loss: {val_epoch_loss:.4f}")
+#####################################################
+import os
+import contextlib
+import io
+import sys
+import pandas as pd
+import numpy as np
+import itertools
+from goatools.base import get_godag
+from goatools.semsim.termwise.wang import SsWang
+import matplotlib.pyplot as plt 
+import seaborn as sns
+import colorcet as cc
+from scipy import stats
+from statsmodels.stats.multitest import fdrcorrection
+from onto_vae.utils import *
+
+
+class Ontobj():
+    """
+    This class functions as a container for a preprocessed ontology (and optionally datasets)
+    and is needed by OntoVAE to train OntoVAE models.
+    The class has the following slots
+    annot_base: contains annotation files for ontology with the following columns
+            'ID': The ID of the DAG term
+            'Name': The name 
+            'depth': the depth (longest distance to a root node)
+            'children': number of children of the term
+            'parents': number of parents of the term
+            'descendants': number of descendant terms
+            'desc_genes': number of genes annotated to term and all its descendants
+            'genes': number of genes directly annotated to term
+    genes_base: contains genes that can be mapped to ontology in alphabetical order
+    graph_base: a dictionary with ontology relationships (children -> parents)
+    annot, genes and graph can contain different trimmed versions
+    desc_genes: a dictionary with all descendant genes (terms -> descendant genes)
+    sem_sim: semantic similarities for all genes of one of the elements in the genes slot
+    data: 2d numpy array with expression values of a dataset matched to the ontology
+
+    Parameters
+    -------------
+    working_dir
+    description: to identify the object, used ontology can be specified here, for example 'GO' or 'HPO' or 'GO_BP'
+    """
+
+    __slots__=('description', 'identifiers', 'annot_base', 'genes_base', 'graph_base', 'annot', 'genes', 'graph', 'desc_genes', 'masks', 'sem_sim', 'data')
+    def __init__(self, description):
+        super(Ontobj, self).__init__()
+
+        self.description = description
+        self.identifiers = None
+        self.annot_base = None
+        self.genes_base = None
+        self.graph_base = None
+        self.annot = {}
+        self.genes = {}
+        self.graph = {}
+        self.desc_genes = {}
+        self.masks = {}
+        self.sem_sim = {}
+        self.data = {}
+
+    def _dag_annot(self, dag, gene_annot, **kwargs):
+
+        """
+        This function takes in a dag object imported by goatools package and returns
+        an annotation pandas dataframe where each row is one term containing the following columns:
+        'ID': The ID of the DAG term
+        'Name': The name 
+        'depth': the depth (longest distance to a root node)
+        'children': number of children of the term
+        'parents': number of parents of the term
+        The pandas dataframe is sorted by 'depth' and 'ID'
+        
+        Parameters
+        ----------
+        dag
+            a dag parsed from an obo file
+        gene_annot
+            pandas dataframe containing gene -> term annotation
+        **kwargs
+            to pass if ids should be filtered, 
+            {'id':'biological_process'}
+        """
+  
+        # parse obo file and create list of term ids
+        term_ids = list(set([vars(dag[term_id])['id'] for term_id in list(dag.keys())]))
+
+        # if an id type was passed in kwargs, filter based on that
+        if 'id' in kwargs.keys():
+            term_idx = [vars(dag[term_id])['namespace'] == kwargs['id'] for term_id in term_ids]
+            valid_ids = [N for i,N in enumerate(term_ids) if term_idx[i] == True]
+            term_ids = valid_ids
+            gene_annot = gene_annot[gene_annot.ID.isin(term_ids)]
+        
+        # extract information for annot file
+        terms = [vars(dag[term_id])['name'] for term_id in term_ids]
+        depths = [vars(dag[term_id])['depth'] for term_id in term_ids]
+        num_children = [len(vars(dag[term_id])['children']) for term_id in term_ids]
+        num_parents = [len(vars(dag[term_id])['parents']) for term_id in term_ids]
+
+        # create annotation pandas dataframe
+        annot = pd.DataFrame({'ID': term_ids,
+                        'Name': terms,
+                        'depth': depths,
+                        'children': num_children,
+                        'parents': num_parents})
+        annot = annot.sort_values(['depth', 'ID'])
+        return annot
+
+
+    def initialize_dag(self, obo, gene_annot, **kwargs):
+
+        """
+        This function initializes our object by filling the slots
+        annot
+        genes
+        graph
+
+        Parameters
+        -------------
+        obo
+            Path to the obo file
+        gene_annot
+            gene_annot
+            Path two a tab-separated 2-column text file
+            Gene1   Term1
+            Gene1   Term2
+            ...
+
+        **kwargs
+            to pass if ids should be filtered, 
+            id = 'biological_process'
+
+        Terms with 0 descendant genes are removed!
+        """
+
+        # load obo file and gene -> term mapping file
+        dag = get_godag(obo, optional_attrs={'relationship'}, prt=None)
+        gene_annot = pd.read_csv(gene_annot, sep="\t", header=None)
+        gene_annot.columns = ['Gene', 'ID']
+
+        self.identifiers = 'Ensembl' if 'ENS' in gene_annot.iloc[0,0] else 'HGNC'
+
+        # create initial annot file
+        if 'id' in kwargs.keys():
+            annot = self._dag_annot(dag, gene_annot, id=kwargs['id'])
+        else:
+            annot = self._dag_annot(dag, gene_annot)
+
+        # convert gene annot file to dictionary
+        gene_term_dict = {a: b["ID"].tolist() for a,b in gene_annot.groupby("Gene")}
+
+        # convert the dag to a dictionary
+        term_term_dict = {term_id: [x for x in vars(dag[term_id])['_parents'] if x in annot.ID.tolist()] for term_id in annot[annot.depth > 0].ID.tolist()}
+
+        # reverse the DAG to be able to count descendants and descendant genes
+        gene_dict_rev = reverse_graph(gene_term_dict)
+        term_dict_rev = reverse_graph(term_term_dict)
+
+        # count descendants and descendant genes and add to annot
+        num_desc = []
+        num_genes = []
+
+        for term in annot.ID.tolist():
+            desc = get_descendants(term_dict_rev, term)
+            num_desc.append(len(set(desc)) - 1)
+            genes = get_descendant_genes(gene_dict_rev, desc)
+            num_genes.append(len(set(genes)))
+        
+        annot['descendants'] = num_desc
+        annot['desc_genes'] = num_genes
+
+        # remove terms that don't have any descendant genes
+        annot_updated = annot[annot.desc_genes > 0]
+        annot_updated = annot_updated.sort_values(['depth', 'ID']).reset_index(drop=True)
+
+        # update the dag dict using only the good IDs
+        term_dict = {term_id: [x for x in vars(dag[term_id])['_parents'] if x in annot_updated.ID.tolist()] for term_id in annot_updated[annot_updated.depth > 0].ID.tolist()}
+        term_dict.update(gene_term_dict)
+
+        # update the annotation file
+
+        # number of annotated genes
+        term_size = gene_annot['ID'].value_counts().reset_index()
+        term_size.columns = ['ID', 'genes']
+        annot_updated = pd.merge(annot_updated, term_size, how='left', on='ID')
+        annot_updated['genes'] = annot_updated['genes'].fillna(0)
+
+        # recalculate number of children
+        all_parents = list(term_dict.values())
+        all_parents = [item for sublist in all_parents for item in sublist]
+        refined_children = [all_parents.count(pid) - annot_updated[annot_updated.ID == pid].genes.values[0] for pid in annot_updated.ID.tolist()]
+        annot_updated['children'] = refined_children
+
+        # recalculate number of descendants
+        term_dict = {term_id: [x for x in vars(dag[term_id])['_parents'] if x in annot_updated.ID.tolist()] for term_id in annot_updated[annot_updated.depth > 0].ID.tolist()}
+        term_dict_rev = reverse_graph(term_dict)
+        num_desc = []
+        for term in annot_updated.ID.tolist():
+            desc = get_descendants(term_dict_rev, term)
+            num_desc.append(len(set(desc)) - 1)
+        annot_updated['descendants'] = num_desc 
+
+        # fill the basic slots
+        self.annot_base = annot_updated
+        self.genes_base = sorted(list(set(gene_annot.Gene.tolist())))
+        term_dict.update(gene_term_dict)
+        self.graph_base = term_dict
+
+
+    def trim_dag(self, top_thresh=1000, bottom_thresh=30):
+
+        """
+        This function trims the DAG based on user-defined thresholds and saves trimmed versions 
+        of the graph, annot and genes files in the respective slots
+
+        Parameters
+        ----------
+        top_thresh
+            top threshold for trimming: terms with > desc_genes will be pruned
+        bottom_thresh
+            bottom_threshold for trimming: terms with < desc_genes will be pruned and
+            their genes will be transferred to their parents
+        """
+
+        # check if base versions of files exits
+        if self.graph_base is None:
+            sys.exit('intial graph has not been created, initialize_dag function needs to be run first!')
+        else:
+            graph_base = self.graph_base.copy()
+
+        if self.annot_base is None:
+            sys.exit('initial annot has not been created, initialize_dag function needs to be run first!')
+        else:
+            annot_base = self.annot_base.copy()
+
+        if self.genes_base is None:
+            sys.exit('initial genes has not been created, initialize_dag function needs to be run first!')
+        else:
+            genes_base = self.genes_base.copy()
+
+        # get terms for trimming
+        top_terms = annot_base[annot_base.desc_genes > top_thresh].ID.tolist()
+        bottom_terms = annot_base[annot_base.desc_genes < bottom_thresh].ID.tolist()[::-1]
+
+        # trim the DAG
+        with contextlib.redirect_stdout(io.StringIO()):
+            term_dict_ttrim = trim_DAG_top(graph_base, annot_base.ID.tolist(), top_terms)
+        with contextlib.redirect_stdout(io.StringIO()):
+            term_dict_trim = trim_DAG_bottom(term_dict_ttrim, annot_base.ID.tolist(), bottom_terms)
+
+        ### ANNOTATION FILE UPDATE ###
+
+        # adjust the annotation file
+        new_annot = annot_base[annot_base.ID.isin(top_terms + bottom_terms) == False].reset_index(drop=True)
+
+        # split the DAG
+        term_trim = {key: term_dict_trim[key] for key in list(term_dict_trim.keys()) if key in new_annot.ID.tolist()}
+        gene_trim = {key: term_dict_trim[key] for key in list(term_dict_trim.keys()) if key not in new_annot.ID.tolist()}  
+
+        # reverse the separate DAGs
+        term_trim_rev = reverse_graph(term_trim)
+        gene_trim_rev = reverse_graph(gene_trim)
+
+        # calculate new children, parent and gene numbers
+        new_children = [len(term_trim_rev[term]) if term in list(term_trim_rev.keys()) else 0 for term in new_annot.ID.tolist()]
+        new_parents = [len(term_trim[term]) if term in list(term_trim.keys()) else 0 for term in new_annot.ID.tolist()]
+        new_genes = [len(gene_trim_rev[term]) if term in list(gene_trim_rev.keys()) else 0 for term in new_annot.ID.tolist()]
+
+        # calculate new descendants and descendant genes
+        num_desc = []
+        num_genes = []
+
+        desc_genes = {}
+
+        for term in new_annot.ID.tolist():
+            desc = get_descendants(term_trim_rev, term)
+            num_desc.append(len(set(desc)) - 1)
+            genes = set(get_descendant_genes(gene_trim_rev, desc))
+            desc_genes[term] = list(genes)
+            num_genes.append(len(genes))
+        
+        # update the annot file
+        new_annot['children'] = new_children
+        new_annot['parents'] = new_parents
+        new_annot['genes'] = new_genes
+        new_annot['descendants'] = num_desc
+        new_annot['desc_genes'] = num_genes
+
+        # set the depth of all terms with 0 parents to 0
+        new_annot.loc[new_annot.parents == 0, 'depth'] = 0
+
+        # adjust depth of other terms
+        min_depth = np.min(new_annot['depth'][new_annot['depth'] != 0])
+
+        def adjust_depth(row):
+            if row['depth'] > 0:
+                return row['depth'] - (min_depth - 1)
+            else:
+                return 0
+        
+        new_annot['depth'] = new_annot.apply(lambda row: adjust_depth(row), axis=1)
+        new_annot = new_annot.sort_values(['depth', 'ID']).reset_index(drop=True)
+
+        # save trimming results in respective slots
+        self.annot[str(top_thresh) + '_' + str(bottom_thresh)] = new_annot
+        self.graph[str(top_thresh) + '_' + str(bottom_thresh)] = term_dict_trim
+        self.genes[str(top_thresh) + '_' + str(bottom_thresh)] = sorted(list(gene_trim.keys()))
+        self.desc_genes[str(top_thresh) + '_' + str(bottom_thresh)] = desc_genes
+
+
+    def create_masks(self, top_thresh=1000, bottom_thresh=30):
+
+        """
+        This function generates the masks for the Onto VAE model.
+            
+        Parameters
+        ----------
+        top_thresh
+            top threshold for trimming
+        bottom_thresh
+            bottom_threshold for trimming
+        
+        The parameters tell the function which trimmed version to use.
+        """
+
+        # check if neccesary objects exist
+        if str(top_thresh) + '_' + str(bottom_thresh) not in self.graph.keys():
+            sys.exit('trimmed graph with specified thresholds missing, trim_dag function needs to be run first!')
+        else:
+            onto_dict = self.graph[str(top_thresh) + '_' + str(bottom_thresh)].copy()
+
+        if str(top_thresh) + '_' + str(bottom_thresh) not in self.annot.keys():
+            sys.exit('trimmed annot with specified thresholds missing, trim_dag function needs to be run first!')
+        else:
+            annot = self.annot[str(top_thresh) + '_' + str(bottom_thresh)].copy()
+
+        if str(top_thresh) + '_' + str(bottom_thresh) not in self.genes.keys():
+            sys.exit('trimmed genes with specified thresholds missing, trim_dag function needs to be run first!')
+        else:
+            genes = self.genes[str(top_thresh) + '_' + str(bottom_thresh)].copy()
+
+        # get all possible depth combos
+        depth = annot.loc[:,['ID', 'depth']]
+        gene_depth = pd.DataFrame({'ID': genes, 'depth': np.max(depth.depth)+1})
+        depth = pd.concat([depth.reset_index(drop=True), gene_depth], axis=0)
+        depth_combos = list(itertools.combinations(list(set(depth['depth'])), 2))
+
+        # create binary matrix for all possible depth combos
+        bin_mat_list = [create_binary_matrix(depth, onto_dict, p[1], p[0]) for p in depth_combos]
+
+        # generate masks for the decoder network
+        levels = ['Level' + str(d) for d in list(set(depth['depth'].tolist()))]
+        mask_cols = [list(levels)[0:i+1][::-1] for i in range(len(levels)-1)]
+        mask_rows = levels[1:]
+
+        idx = [[mat.columns.name in mask_cols[i] and mat.index.name == mask_rows[i] for mat in bin_mat_list] for i in range(len(mask_rows))]
+        masks = [np.array(pd.concat([N for i,N in enumerate(bin_mat_list) if j[i] == True][::-1], axis=1)) for j in idx]
+
+        # store masks
+        self.masks[str(top_thresh) + '_' + str(bottom_thresh)] = masks
+
+
+    def compute_wsem_sim(self, obo, top_thresh=1000, bottom_thresh=30):
+
+        """
+        This function takes an obo file and an ontology annot file and returns
+        a 2D numpy array with Wang semantic similarities between the IDs of the annot file.
+        Only used for web application
+        
+        Parameters
+        ----------
+        obo
+            Path to the obo file
+
+        top_thresh
+            top threshold for trimming
+        bottom_thresh
+            bottom_threshold for trimming
+        
+        The parameters tell the function which trimmed version to use.
+        """
+
+        # check if neccesary files exist and load them 
+        if str(top_thresh) + '_' + str(bottom_thresh) not in self.annot.keys():
+            sys.exit('trimmed annot with specified thresholds missing, trim_dag function needs to be run first!')
+        else:
+            annot = self.annot[str(top_thresh) + '_' + str(bottom_thresh)].copy()
+
+        # parse the DAG
+        dag = get_godag(obo, optional_attrs={'relationship'}, prt=None)
+
+        # get list of IDs
+        ids = annot['ID'].tolist()
+
+        # compute wang semantic similarities
+        wang = SsWang(ids, dag)
+        wsem_sim = [[wang.get_sim(id1, id2) for id2 in ids] for id1 in ids]
+        wsem_sim = np.array(wsem_sim)
+
+        # store results
+        self.sem_sim[str(top_thresh) + '_' + str(bottom_thresh)] = wsem_sim
+
+
+
+    def match_dataset(self, expr_data, name, top_thresh=1000, bottom_thresh=30):
+
+        """
+        This function takes a dataset, matches the features to the features of the preprocessed ontology and stores it in the data slot
+
+        Parameters
+        ----------
+        expr_data
+            a Pandas dataframe with gene names in index and samples names in columns OR 
+            Path to the dataset to be matched, can be either:
+              - a file with extension .csv (separated by ',')
+              - a file with extension .txt (separated by '\t'), 
+                with features in rows and samples in columns
+             The dataset should not have duplicated genenames!
+
+        top_thresh
+            top threshold for trimming
+        bottom_thresh
+            bottom_threshold for trimming
+        
+        The parameters tell the function which trimmed version to use.
+
+        name
+            name to be used for identifying the matched dataset
+        """
+
+        # check if ontology has been trimmed and import the genes file
+
+        if str(top_thresh) + '_' + str(bottom_thresh) not in self.genes.keys():
+            sys.exit('trimmed genes with specified thresholds missing, trim_dag function needs to be run first!')
+        else:
+            genes = pd.DataFrame(self.genes[str(top_thresh) + '_' + str(bottom_thresh)])
+
+        # check file extension of dataset to be matched
+        if isinstance(expr_data, pd.DataFrame):
+            expr = expr_data
+        else:
+            basename = os.path.basename(expr_data)
+            ext = basename.split('.')[1]
+
+            if ext == 'csv':
+                expr = pd.read_csv(expr_data, sep=",", index_col=0)
+            elif ext == 'txt':
+                expr = pd.read_csv(expr_data, sep="\t", index_col=0)
+            else:
+                sys.exit('File extension not supported.')
+
+        # merge data with ontology genes and save
+        genes.index = genes.iloc[:,0]
+        merged_expr = genes.join(expr).fillna(0).drop(0, axis=1).T
+
+        if str(top_thresh) + '_' + str(bottom_thresh) not in self.data.keys():
+            self.data[str(top_thresh) + '_' + str(bottom_thresh)] = {}
+
+        self.data[str(top_thresh) + '_' + str(bottom_thresh)][name] = merged_expr.to_numpy()
+
+    
+    def extract_annot(self, top_thresh=1000, bottom_thresh=30):
+        return self.annot[str(top_thresh) + '_' + str(bottom_thresh)]
+
+    def extract_genes(self, top_thresh=1000, bottom_thresh=30):
+        return self.genes[str(top_thresh) + '_' + str(bottom_thresh)]
+
+    def extract_dataset(self, dataset, top_thresh=1000, bottom_thresh=30):
+        return self.data[str(top_thresh) + '_' + str(bottom_thresh)][dataset]
+
+    
+    def add_dataset(self, dataset, description, top_thresh=1000, bottom_thresh=30):
+        """
+        This function can be used if for example a perturbation should only be performed on
+        a subset of the data. Then this subset can be stored in separate slot.
+        """
+        self.data[str(top_thresh) + '_' + str(bottom_thresh)][description] = dataset
+
+
+    def remove_link(self, term, gene, top_thresh=1000, bottom_thresh=30):
+        """
+        This function removes the link between a gene and a term in the masks slot.
+        You will modify the masks! So better do not save the ontobj after that, but just
+        remove the link before training a model
+
+        Parameters
+        ----------
+        term
+            id of the term
+        gene
+            the gene
+        top_thresh
+            top threshold for trimming
+        bottom_thresh
+            bottom_threshold for trimming
+        """
+        onto_annot = self.extract_annot(top_thresh=top_thresh,
+                                        bottom_thresh=bottom_thresh)
+        genes = self.extract_genes(top_thresh=top_thresh,
+                                        bottom_thresh=bottom_thresh)
+
+        # retrieve indices to remove link
+        # for the term, we need to work around, as terms in masks are sorted reversed (Depth 15 -> Depth 14 -> Depth 13 ...)
+        term_depth = onto_annot[onto_annot.ID == term].depth.to_numpy()[0]
+        depth_counts = onto_annot.depth.value_counts().sort_index(ascending=False)
+        start_point = depth_counts[depth_counts.index > term_depth].sum()
+        annot_sub = onto_annot[onto_annot.depth == term_depth]
+        term_idx = annot_sub[annot_sub.ID == term].index.to_numpy()
+        gene_idx = genes.index(gene)
+
+        self.masks[str(top_thresh) + '_' + str(bottom_thresh)][-1][gene_idx, start_point + term_idx] = 0
+
+
+    def plot_scatter(self, sample_annot, color_by, act, term1, term2, top_thresh=1000, bottom_thresh=30):
+        """ 
+        This function is used to make a scatterplot of two pathway activities
+
+        Parameters
+        ----------
+        sample_annot
+            a Pandas dataframe with gene names in index and samples names in columns OR 
+            a file with extension .csv (separated by ',') or with extension .txt (separated by '\t'), 
+            with features in rows and samples in columns
+        color_by
+            the column of sample_annot to use for coloring
+        act
+            numpy array containing pathway activities
+        term1
+            ontology term on x-axis
+        term2
+            ontology term on y-axis
+        top_thresh
+            top threshold for trimming
+        bottom_thresh
+            bottom_threshold for trimming
+        """
+        # import sample annotation
+        if isinstance(sample_annot, pd.DataFrame):
+            sample_annot = sample_annot
+        else:
+            basename = os.path.basename(sample_annot)
+            ext = basename.split('.')[1]
+
+            if ext == 'csv':
+                sample_annot = pd.read_csv(sample_annot, sep=",", index_col=0)
+            elif ext == 'txt':
+                sample_annot = pd.read_csv(sample_annot, sep="\t", index_col=0)
+
+        # create color dict
+        categs = sample_annot.loc[:,color_by].unique().tolist()
+        palette = sns.color_palette(cc.glasbey, n_colors=len(categs))
+        color_dict = dict(zip(categs, palette))
+
+        # extract ontology annot and get term indices
+        onto_annot = self.extract_annot(top_thresh=top_thresh, bottom_thresh=bottom_thresh)
+        ind1 = onto_annot[onto_annot.Name == term1].index.to_numpy()
+        ind2 = onto_annot[onto_annot.Name == term2].index.to_numpy()
+
+        # make scatterplot
+        fig, ax = plt.subplots(figsize=(10,7))
+        sns.scatterplot(x=act[:,ind1].flatten(),
+                        y=act[:,ind2].flatten(),
+                        hue=sample_annot.loc[:,color_by],
+                        palette=color_dict,
+                        legend='full',
+                        s=8,
+                        rasterized=True)
+        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+        plt.xlabel(term1)
+        plt.ylabel(term2)
+        plt.tight_layout()
+
+    
+    def wilcox_test(self, control, perturbed, direction='up', option='terms', top_thresh=1000, bottom_thresh=30):
+        """ 
+        Function to perform paired Wilcoxon test between activities and perturbed activities
+
+        Parameters
+        ----------
+        act
+            numpy 2D array of pathway activities 
+        perturbed_act
+            numpy 2D array of perturbed pathway activities
+        direction
+            up: higher in perturbed
+            down: lower in perturbed
+        top_thresh
+            top threshold for trimming
+        bottom_thresh
+            bottom_threshold for trimming
+        option
+            'terms' or 'genes'
+        """
+        # perform paired wilcoxon test over all terms
+        alternative = 'greater' if direction == 'up' else 'less'
+        wilcox = [stats.wilcoxon(perturbed[:,i], control[:,i], zero_method='zsplit', alternative=alternative) for i in range(control.shape[1])]
+        stat = np.array([i[0] for i in wilcox])
+        pvals = np.array([i[1] for i in wilcox])
+        qvals = fdrcorrection(np.array(pvals))
+
+        if option == 'terms':
+            # extract ontology annot
+            onto_annot = self.extract_annot(top_thresh=top_thresh, bottom_thresh=bottom_thresh)
+
+            # create results dataframe 
+            res = pd.DataFrame({'id': onto_annot.ID.tolist(),
+                                'term': onto_annot.Name.tolist(),
+                                'depth': onto_annot.depth.tolist(),
+                                'stat': stat,
+                                'pval' : pvals,
+                                'qval': qvals[1]})
+        
+        else:
+            # extract ontology genes
+            onto_genes = self.extract_genes(top_thresh=top_thresh, bottom_thresh=bottom_thresh)
+
+            # create results dataframe
+            res = pd.DataFrame({'gene': onto_genes,
+                                'stat': stat,
+                                'pval' : pvals,
+                                'qval': qvals[1]})
+
+        res = res.sort_values('pval').reset_index(drop=True)
+        return(res)
+
+        #######################################################
+        import pandas as pd
+import itertools
+import copy
+import pkg_resources
+
+
+
+###--------------------------------------
+## DAG REVERSAL
+###--------------------------------------
+
+def reverse_graph(graph):
+    reverse = {}
+    for v in graph:
+        for e in graph[v]:
+            if e not in reverse:
+                reverse[e] = []
+            reverse[e].append(v)
+    return reverse
+
+
+
+###--------------------------------------
+## DESCENDANT GENE COUNTING
+###--------------------------------------
+
+# function to iterate over DAG for a given term and get all children and children's children
+# this function has to be run with a reversed DAG, with mapping parents -> children, not containing gene annot
+def get_descendants(dag, term):
+
+    descendants = []
+    queue = []
+
+    descendants.append(term)
+    queue.append(term)
+
+    while len(queue) > 0:
+        node = queue.pop(0)
+        if node in list(dag.keys()):
+            children = dag[node]
+            descendants.extend(children)
+            queue.extend(children)
+        else:
+            pass
+
+    return descendants
+
+# function to, given a list of descendant terms, get all genes associated to them
+# the function has to be run with reversed gene annot dict, with mapping terms -> annotated genes
+def get_descendant_genes(dag, descendants):
+
+    desc_dict = {key: dag[key] for key in list(dag.keys()) if key in descendants}
+    genes = list(desc_dict.values())
+    genes = [item for sublist in genes for item in sublist]
+    return genes
+
+
+
+
+
+###--------------------------------------
+## ONTOLOGY DECODER MASKS
+###--------------------------------------
+
+# function to create binary matrices 
+
+def create_binary_matrix(depth, dag, childnum, parentnum):
+    ## depth is a dataframe containing all IDs (ontology IDs and genes) ['ID'] and their respective depth ['Depth'] in the graph
+    ## dag is a dictionary, keys: all IDs, values: parents of respective ID
+    ## childnum is a number indicating which depth level to use as child level
+    ## parentnum is number is a number indicating which depth level to use as parent level
+    
+    ## output is a binary sparse pandas dataframe with 0s and 1s indicating if there is a relationship
+    ## between any two elements from the two depth levels investigated
+
+    # create two lists of IDs from two different levels (child and parent)
+    children = depth.loc[depth['depth'] == childnum, 'ID'].tolist()
+    parents = depth.loc[depth['depth'] == parentnum, 'ID'].tolist()
+
+    # create a dataframe with all possible combinations of the two lists
+    df = pd.DataFrame(list(itertools.product(children, parents)), columns=['Level' + str(childnum), 'Level' + str(parentnum)])
+
+    # for each potential child-parent pair, check if there is a relationship and add this to the df
+    interact = [1 if y in dag[x] else 0 for x, y in zip(df['Level' + str(childnum)], df['Level' + str(parentnum)])]
+    df['interact'] = interact
+
+    # change from long format to wide format
+    df = df.pivot(index='Level' + str(childnum), columns='Level' + str(parentnum), values='interact')
+
+    return(df)
+
+
+
+
+###--------------------------------------
+## DAG TRIMMING
+###--------------------------------------
+
+# DAG trimming from bottom given a list of terms
+
+###-------------->  helper function to trim one term
+
+def trim_term_bottom(term, term_term_dict, term_dict_rev, gene_dict_rev):
+    """
+    Input
+    -----------------
+    term: the term to be trimmed off
+    term_term_dict: mapping children -> parents excluding the genes
+    term_dict_rev: parents(terms) -> children(terms)
+    gene_dict_rev: parents(terms) -> children(genes)
+
+    Output
+    -----------------
+    This function is changing the term_dict_rev and the gene_dict_rev variables
+    """
+
+    # check if term has parents (depth0 won't have)
+    if term in list(term_term_dict.keys()):
+        parents = copy.deepcopy(term_term_dict[term])
+    else:
+        parents = []
+
+    # iterate over parents and remove the term from their children
+    # also add the genes of the term to the genes of its parents
+    if len(parents) > 0:
+        for p in parents:
+            term_dict_rev[p].remove(term)
+            if p not in list(gene_dict_rev.keys()):
+                gene_dict_rev[p] = []
+            gene_dict_rev[p].extend(gene_dict_rev[term])
+            gene_dict_rev[p] = list(set(gene_dict_rev[p])) # remove eventual duplicates
+
+    # remove the term -> genes and term -> term entries from the dicts
+    del gene_dict_rev[term]
+    if term in list(term_dict_rev.keys()):
+        del term_dict_rev[term]
+
+
+
+###--------------> function to trim the DAG
+
+def trim_DAG_bottom(DAG, all_terms, trim_terms):
+    """
+    Input
+    -----------------
+    DAG: the DAG to be trimmed
+    all_terms: all ontology terms 
+    trim_terms: ontology terms that need to be trimmed off
+
+    Output
+    -----------------
+    term_dict: the trimmed DAG
+    """
+
+    # separate dict for terms only
+    term_term_dict = {key: DAG[key] for key in list(DAG.keys()) if key in all_terms}
+
+    # separate dict for genes only
+    term_gene_dict = {key: DAG[key] for key in list(DAG.keys()) if key not in all_terms}   
+    
+    # reverse the separate dicts
+    term_dict_rev = reverse_graph(term_term_dict)
+    gene_dict_rev = reverse_graph(term_gene_dict)
+
+    # run the trim_term function over all terms to update the dicts
+    for t in trim_terms:
+        print(t)
+        trim_term_bottom(t, term_term_dict, term_dict_rev, gene_dict_rev)
+
+    # reverse back the dicts and combine
+    term_dict = reverse_graph(term_dict_rev)
+    gene_dict = reverse_graph(gene_dict_rev)
+    term_dict.update(gene_dict)
+
+    return term_dict
+
+
+# DAG trimming from top given a list of terms
+
+###--------------> helper function to trim off one term
+
+def trim_term_top(term, term_dict_rev, gene_dict_rev):
+
+    # delete the term
+    if term in list(term_dict_rev.keys()):
+        del term_dict_rev[term]
+    if term in list(gene_dict_rev.keys()):
+        del gene_dict_rev[term]
+
+
+###--------------> function to trim the DAG
+
+def trim_DAG_top(DAG, all_terms, trim_terms):
+    """
+    Input
+    -----------------
+    DAG: the DAG to be trimmed
+    all_terms: all ontology terms 
+    trim_terms: ontology terms that need to be trimmed off
+
+    Output
+    -----------------
+    term_dict: the trimmed DAG
+    """
+
+    # separate dict for ontology terms only
+    term_term_dict = {key: DAG[key] for key in list(DAG.keys()) if key in all_terms}
+
+    # separate dict for genes only
+    term_gene_dict = {key: DAG[key] for key in list(DAG.keys()) if key not in all_terms}   
+    
+    # reverse the separate dicts
+    term_dict_rev = reverse_graph(term_term_dict)
+    gene_dict_rev = reverse_graph(term_gene_dict)
+
+    # run the trim_term function over all terms to update the dicts
+    for t in trim_terms:
+        print(t)
+        trim_term_top(t, term_dict_rev, gene_dict_rev)
+
+    # reverse back the dicts and combine
+    term_dict = reverse_graph(term_dict_rev)
+    gene_dict = reverse_graph(gene_dict_rev)
+    term_dict.update(gene_dict)
+
+    return term_dict
+
+
+
+
+# recursive path-finding function (https://www.python-kurs.eu/hanser-blog/examples/graph2.py)
+# in the dict: from key to value, eg. in dag, from child -> parent
+def find_all_paths(graph, start, end, path=[]):
+    path = path + [start]
+    if start == end:
+        return [path]
+    if start not in graph:
+        return []
+    paths = []
+    for node in graph[start]:
+        if node not in path:
+            new_paths = find_all_paths(graph, node, end, path)
+            for p in new_paths: 
+                paths.append(p)
+    return paths
+
+
+
+
+###--------------------------------------
+## ACCESS PACKAGE DATA
+###--------------------------------------
+
+def data_path():
+    path = pkg_resources.resource_filename(__name__, 'data/')
+    return path
+# https://academic.oup.com/bioinformatics/article/39/6/btad387/7199588
