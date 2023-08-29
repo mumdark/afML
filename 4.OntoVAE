@@ -2028,3 +2028,119 @@ def data_path():
     path = pkg_resources.resource_filename(__name__, 'data/')
     return path
 # https://academic.oup.com/bioinformatics/article/39/6/btad387/7199588
+
+
+# myVAE
+import torch
+from matplotlib import pyplot as plt
+from torch import nn, optim
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.metrics import accuracy_score
+import pandas as pd
+# 读入文件并处理
+featuredata = pd.read_csv("featuredata.txt", sep="\t", index_col=0)
+scaled_data = (featuredata - featuredata.mean()) / featuredata.std()
+tAS = pd.read_csv("tAS.txt", header=None).squeeze("columns").tolist()
+tASfeatureraw = scaled_data.loc[tAS]
+tASfeature_train = tASfeatureraw.sample(30)
+tASfeature_test = tASfeatureraw[tASfeatureraw.index.isin(tASfeature_train.index.tolist()) == False]
+# 转换为Tensor浮点对象
+tASfeature_train_TF = torch.FloatTensor(tASfeature_train.values)
+tASfeature_test_TF = torch.FloatTensor(tASfeature_test.values)
+
+class VAEmodel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, latent_dim):
+        # latent_dim and classifier are list which length is 4 and 2, respectively.
+        super(VAEmodel, self).__init__()
+        # encoder
+        self.encode_layers = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim[0]),
+            nn.ReLU(),
+            nn.Linear(hidden_dim[0], hidden_dim[1]),
+            nn.ReLU(),
+        )
+        self.mean = nn.Linear(hidden_dim[1], latent_dim)
+        self.log_var = nn.Linear(hidden_dim[1], latent_dim)
+        # decoder
+        self.decode_layers = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim[1]),
+            nn.ReLU(),
+            nn.Linear(hidden_dim[1], hidden_dim[0]),
+            nn.ReLU(),
+            nn.Linear(hidden_dim[0], input_dim)
+        )
+
+    def encode(self, x):
+        mean = self.mean(self.encode_layers(x))
+        log_var = self.log_var(self.encode_layers(x))
+        return mean, log_var
+
+    def reparameterization(self, mean, log_var):
+        sigma = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(sigma)
+        return mean + eps * sigma
+
+    def decode(self, z):
+        recon_x = self.decode_layers(z)
+        return recon_x
+
+    def forward(self, x):
+        mean, log_var = self.encode(x)
+        z = self.reparameterization(mean, log_var)
+        recon_x = self.decode(z)
+        return z, recon_x, mean, log_var
+
+
+input_dim = tASfeature_train_TF.shape[1]
+hidden_dim = [64, 32]
+latent_dim = 16
+
+# 1使用TensorDataset和DataLoader创建数据加载器
+dataset = TensorDataset(tASfeature_train_TF)
+dataloader = DataLoader(dataset, batch_size= 5, shuffle=True)
+
+# 2 添加cuda, 如果有的话
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# 3 设置模型
+model = VAEmodel(input_dim, hidden_dim, latent_dim)
+# print(model)
+
+# 测试模型
+# input = torch.rand((1, 1, 784))
+# output = model(input)
+# print(output)
+
+# 4 设置损失函数
+recon_loss = nn.MSELoss()
+kl_loss = lambda mean, log_var: -5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+
+# 5 设置优化器
+learning_rate = 1e-3
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+# 6 设置训练网络的一些参数
+epochs = 20
+# 7 开始训练
+for epoch in range(epochs):
+    print("--------epoch: {}------".format(epoch + 1))
+    for data in dataloader:
+        inputs, = data
+        optimizer.zero_grad()  # 计算梯度之前，把上一次的梯度清零
+        _, recon_data, mean, log_var = model(inputs)
+        loss1 = recon_loss(recon_data, inputs)
+        loss2 = kl_loss(mean, log_var)
+        loss = loss1 + loss2
+        loss.backward()
+        optimizer.step()
+    print("Train loss: {}".format(loss))
+
+print(train_acc[-1], test_acc[-1])
+plt.plot(train_acc, color="red", linestyle="-", label="train")
+plt.plot(test_acc, color="blue", linestyle="--", label="test")
+plt.title("Test and Train Accuracy")
+plt.xlabel("times")
+plt.ylabel("accuracy")
+plt.legend(loc="upper right")
+plt.show()
