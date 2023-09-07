@@ -1,0 +1,496 @@
+################### 主文件：Mainscript1.sh ，Run Mainscript1.sh (Steps 1 to 3) on individual sequencing runs
+################### 这个脚本主要是用于处理生物信息学数据，具体地，它是用于处理nanopore测序数据。
+################### 脚本首先设置了一些环境变量和默认值，然后解析命令行参数，并根据这些参数执行三个不同的脚本，分别进行基因组映射、数据处理和特征提取。
+
+#!/usr/bin/env bash                 # 指定脚本使用的解释器为bash
+set -e                              # 如果任何命令执行失败，则退出脚本
+
+# 这是胶囊的主脚本。当您点击"Reproducible Run"时，此文件中的代码将执行。
+
+codedir="/path/to/dinopore/code"    # 设置代码目录的路径
+
+# 设置三个环境变量，用于后续的Java命令和graphmap2命令
+export SAM2TSV="java -jar ${codedir}/misc/sam2tsv.jar"
+export PICARD="java -jar ${codedir}/misc/picard.jar"
+export graphmap2="${codedir}/misc/graphmap2"
+
+chmod 744 $graphmap2               # 修改graphmap2的权限为744
+delfastq=n                         # 设置默认值为n
+
+# 定义一个函数，用于打印帮助信息
+usage() {
+    echo ""
+    echo "Usage: $0 [ -e PATH/TO/EXPTDIR ] [ -r PATH/TO/REFERENCE.FASTA ] [ -n num_threads ] [ -g aggregateGroup ]" 1>&2
+    echo ""
+    echo "Optional:"
+    echo "  -d  [y/n] Delete base-called fastq files? Default value is n."
+    echo ""
+}
+
+# 定义一个函数，用于异常退出
+exit_abnormal() {
+  usage
+  exit 1
+}
+
+# 使用getopts解析命令行参数
+while getopts ":e:r:n:g:d:" options; do
+  case "${options}" in
+    e) exptdir=${OPTARG} ;;
+    r) ref=${OPTARG} ;;
+    n)
+      numcore=${OPTARG}
+      re_isanum='^[0-9]+$'
+      if ! [[ $numcore =~ $re_isanum ]] ; then
+        echo "Error: numcore must be a positive integer."
+        exit_abnormal
+      elif [ $numcore -eq "0" ]; then
+        echo "Error: numcore must be a positive integer"
+        exit_abnormal
+      fi
+      ;;
+    g) agggrp=${OPTARG} ;;
+    d) delfastq=${OPTARG} ;;
+    :) 
+      echo "Error: -${OPTARG} requires an argument."
+      exit_abnormal
+      ;;
+    *) exit_abnormal ;;
+  esac
+done
+
+# 检查必要的参数是否已提供
+if [ "$exptdir" = "" ]; then
+        echo "Error: please provide path to experiment directory."
+        exit_abnormal
+fi
+
+if [ "$ref" = "" ]; then
+        echo "Error: please provide path to FASTA for mapping."
+        exit_abnormal
+fi
+
+if [ "$numcore" = "" ]; then
+        echo "Error: please indicate number of cores to assign to DInoPORE."
+        exit_abnormal
+fi
+
+if [ "$agggrp" = "" ]; then
+        echo "Error: please specify a group name for aggregation. Please use only letters and/or numbers. Avoid using symbols."
+        exit_abnormal
+fi
+
+# 根据delfastq的值，决定是否删除FASTQ文件
+if [ "$delfastq" = "" ]; then
+  delfastq=n
+elif [ "$delfastq" = "n" ]; then
+  echo "FASTQ files in out_fastq_bam folder will be preserved"
+elif [ "$delfastq" = "N" ]; then
+  delfastq=n
+  echo "FASTQ files in out_fastq_bam folder will be preserved"
+elif [ "$delfastq" = "y" ]; then
+  echo "FASTQ files in out_fastq_bam folder will be deleted"
+elif [ "$delfastq" = "Y" ]; then
+  delfastq=y
+  echo "FASTQ files in out_fastq_bam folder will be deleted"
+else
+  echo "Error: [y/N] please specify whether FASTQ files in path/to/exptdir/out_fastq_bam should be deleted. WARNING: ALL FILES ENDING WITH *.FASTQ WILL BE DELETED. IF UNSURE, INPUT "n"."
+  exit_abnormal
+fi
+
+# 执行三个步骤的脚本
+sh ${codedir}/S1.Basecall_map_nanopolish.sh $exptdir $ref $numcore $delfastq
+sh ${codedir}/S2.Process_bam_nnpl.sh $exptdir $ref $numcore
+sh ${codedir}/S3.Generate_raw_features.sh $exptdir $numcore $agggrp
+
+##############################
+########################
+##################
+####### S1.Basecall_map_nanopolish.sh
+#这个脚本是用于处理生物信息学数据的，特别是用于处理nanopore测序数据。
+#脚本首先设置了一些基本的参数，如flowcell和kit的类型。然后，它定义了一系列的文件和目录路径，用于后续的数据处理。
+#接下来，脚本执行了几个主要的步骤，包括从fast5文件进行basecalling，将所有的fastq文件合并为一个，
+#映射reads到参考基因组，索引bam文件，以及使用nanopolish进行数据分析。每个步骤都有详细的注释说明其功能。
+
+#!/bin/bash                          # 指定脚本使用的解释器为bash
+
+flowcell=FLO-MIN106                  # 设置flowcell变量的值为FLO-MIN106
+kit=SQK-RNA002                       # 设置kit变量的值为SQK-RNA002
+
+# 打印运行详情并定义变量名
+echo =========================================================================================
+echo "S1 Start: $(date)"             # 打印当前日期和时间
+echo Flowcell used: $flowcell       # 打印flowcell的值
+echo Sequencing kit used: $kit      # 打印kit的值
+
+# 定义变量
+exptdir=$1                          # 第一个命令行参数，样本文件夹的目录
+ref=$2                              # 第二个命令行参数，参考序列
+numcore=$3                          # 第三个命令行参数，核心数
+delfastq=$4                         # 第四个命令行参数，是否删除fastq文件
+
+expt=$(basename $exptdir)           # 获取exptdir的基本名
+fast5dir=${exptdir}/fast5           # 定义fast5文件的目录
+fqdir=${exptdir}/out_fastq_bam      # 定义fastq和bam文件的输出目录
+npdir=${exptdir}/out_nanopolish     # 定义nanopolish输出目录
+fqCombined=${expt}.combined.fastq   # 定义组合fastq文件的名称
+fq=$fqdir/$fqCombined               # 定义完整的fastq文件路径
+sam=${expt}.combined.gm2.sam        # 定义sam文件的名称
+sortedBam=$expt.sorted.bam          # 定义排序后的bam文件名称
+npsummary=$expt.$(basename $ref).gm2.nanopolish.sum # 定义nanopolish摘要文件的名称
+np_out=$npdir/$expt.gm2.nanopolish_eventAlignOut.txt # 定义nanopolish输出文件的名称
+
+cd $exptdir                         # 切换到实验目录
+mkdir -p $fqdir $npdir              # 创建输出目录
+
+# 第1步 - 使用guppy从fast5/进行basecall
+guppy_basecaller -i $fast5dir -s $fqdir --flowcell $flowcell --kit $kit --cpu_threads_per_caller 12 -r
+
+# 第2步 - 将所有fastq文件合并为一个主fastq文件"*.combined.fastq"
+cd $fqdir
+#rm $fqCombined
+#cat *.fastq > $fqCombined
+#echo All fastq have been combined.
+
+# 根据delfastq的值决定是否删除FASTQ文件
+if [ "$delfastq" = "y" ]; then
+ find . -maxdepth 1 -type f -name '*.fastq' -a ! -name '*.combined.fastq' -delete
+elif [ "$delfastq" = "n" ]; then
+ echo "Base-called FASTQ files preserved. Proceeding to map reads."
+fi
+
+# 第3步 - 映射到参考基因组。生成sam文件
+sed -i 's/U/T/g' $fqCombined         # 将文件$fqCombined中的所有U字符替换为T字符
+$graphmap2 align -x rnaseq -t $numcore -r $ref -d $fqCombined -o $sam
+# minimap2 -ax map-ont -t $numcore $ref $fqCombined > $sam
+
+# 第4步 - 索引bam并生成统计信息 - 覆盖率、错误率、读取次数
+samtools view -@ $numcore -S $sam -b | samtools sort -o $sortedBam - ; samtools index $sortedBam # 这个命令行首先将一个SAM文件转换为BAM格式，然后对BAM文件进行排序，并为排序后的BAM文件创建一个索引
+
+# 第5步 - 在主文件夹中，使用nanopolish index索引fast5到fastq
+#这个命令的目的是为后续的nanopolish步骤创建一个索引，这个索引将FASTQ文件中的序列与原始的FAST5文件中的电流信号数据关联起来。
+#这样，当nanopolish在后续步骤中需要访问原始的电流信号数据时，它可以快速找到相关的FAST5文件。
+nanopolish index -d $fast5dir/ $fq
+
+# 第6步 - 运行nanopolish为fastq文件，从minimap2生成的草图基因组组装计算改进的一致性序列
+#这个命令的主要目的是对齐（或比较）原始的测序信号与参考基因组。
+#它不仅仅是比对碱基序列，而是比对原始的电信号数据与参考序列。
+nanopolish eventalign --reads $fq --bam $sortedBam --genome $ref --summary $npsummary --print-read-names --threads $numcore --scale-events > $np_out
+
+echo -e S1 End: $(date) "\n"
+echo =========================================================================================
+
+
+##############################
+########################
+##################
+####### S2.Process_bam_nnpl.sh
+#这个脚本主要用于处理生物信息学数据，特别是与sam2tsv和nanopolish相关的数据。
+#脚本首先设置了一些基本的参数和路径。接着，它检查是否存在一个序列字典文件，如果不存在，它将使用PICARD工具创建一个。
+#然后，脚本运行两个子脚本：一个用于处理sam2tsv的输出，另一个用于处理nanopolish的原始数据。
+#这两个子脚本都在当前脚本所在的目录中，并且它们都需要一些参数，如实验目录、参考序列和核心数。最后，脚本打印结束时间。
+#!/bin/bash                           # 指定脚本使用的解释器为bash
+
+exptdir=$1                            # 第一个命令行参数，实验目录
+ref=$2                                # 第二个命令行参数，参考序列
+numcore=$3                            # 第三个命令行参数，核心数
+
+codedir=$(cd $(dirname $0) && pwd)     # 获取当前脚本所在的目录路径
+
+expt=$(basename ${exptdir})           # 获取实验目录的基本名
+fqdir=${exptdir}/out_fastq_bam        # 定义fastq和bam文件的输出目录
+npdir=${exptdir}/out_nanopolish       # 定义nanopolish输出目录
+dict=$(echo $ref | sed 's/.fasta//g' | sed 's/.fa//g').dict # 从参考序列文件名中移除.fasta或.fa扩展名，并添加.dict扩展名
+
+echo =========================================================================================
+echo "S2 Start: $(date)"               # 打印当前日期和时间
+
+# Part 1 - sam2tsv
+# Step 1 - 创建序列字典
+if [ ! -f "$dict" ]; then              # 如果序列字典文件不存在
+	echo Sequence dictionary not found. Creating sequence dictionary.
+	$PICARD CreateSequenceDictionary R=$ref O=$dict # 使用PICARD工具创建序列字典
+else
+	echo Sequence dictionary found.    # 如果序列字典文件存在，打印消息
+fi
+
+# Step 2 - 运行sam2tsv并处理tsv文件
+sh ${codedir}/s2.Sam2tsv_processtsv.sh $fqdir $expt $exptdir $ref $numcore
+
+# Part 2 - 处理原始nanopolish文件
+sh ${codedir}/s2.Combine_raw_nnpl.sh $npdir $expt $exptdir $numcore
+
+echo -e S2 End: $(date) "\n"           # 打印当前日期和时间
+echo =========================================================================================
+
+###
+#####
+#######
+##########对于s2.Sam2tsv_processtsv.sh
+######
+###
+#这个脚本的主要目的是将bam文件转换为tsv文件，并进行一系列的处理，
+#如删除某些行、替换NA值、格式化正负注释等。处理后的tsv文件将被保存在一个特定的目录中。
+#!/bin/bash                           # 指定脚本使用的解释器为bash。
+
+#Note: remember to unzip fasta        # 注释提醒用户记得解压fasta文件。
+#This script is used to convert bam file into tsv file, then process it (remove S, H and N, only keep M (match or mismatch), D (deletion) and I (insertion). Then replace NA in called base, format positive and negative annotation) # 注释说明此脚本的主要功能。
+
+fqdir=$1                               # 定义fastq文件的目录。
+expt=$2                                # 定义实验的名称。
+exptdir=$3                             # 定义实验的目录。
+ref=$4                                 # 定义参考序列。
+numcore=$5                             # 定义要使用的核心数。
+
+cd $fqdir                              # 切换到fastq文件的目录。
+
+sortedBam=$expt.sorted.bam             # 定义排序后的bam文件的名称。
+final=$expt.tsv.txt                    # 定义最终的tsv文件的名称。
+ftdir=${exptdir}/raw_features          # 定义原始特征的目录。
+
+mkdir -p $ftdir                        # 创建原始特征的目录（如果不存在）。
+
+#Process tsv file to remove S, H and N, only keep M (match or mismatch), D (deletion) and I (insertion). Then replace NA in called base, format positive and negative annotation
+samtools view -@ $numcore -h -F 4 $sortedBam | $SAM2TSV -r $ref | awk 'BEGIN{FS=OFS="\t"} ($9 != "S") && ($9 != "H") && ($9 != "N")' - | awk 'BEGIN{FS=OFS="\t"} ($7=="."){$7="-99";} ($4=="."){$4="-99"} ($5=="."){$5="na"} ($8=="."){$8="na"} ($9=="D"){$6=" "} ($2==16){$2="n"} ($2==0){$2="p"} 1' > $final
+                                        # 使用`samtools`查看并过滤bam文件，然后使用`SAM2TSV`将其转换为tsv格式。接着，使用`awk`命令进行进一步的处理，如删除某些行、替换NA值等。
+
+mv $final -t $ftdir                     # 将最终的tsv文件移动到原始特征的目录。
+#
+###
+#####
+#######
+#########对于s2.Combine_raw_nnpl.sh
+#######
+#####
+###
+#这个脚本的目的是处理nanopolish的输出文件。
+#它将文件分成多个块，并使用R脚本处理每个块。处理后的块会被合并成一个输出文件，并保存在一个特定的目录中。
+#!/bin/bash                           # 指定脚本使用的解释器为bash。
+
+npdir=$1                               # 定义nanopolish的目录。
+expt=$2                                # 定义实验的名称。
+exptdir=$3                             # 定义实验的目录。
+numcore=$4                             # 定义要使用的核心数。
+
+codedir=$(cd `dirname $0` && pwd)      # 获取当前脚本所在的目录。
+cd $npdir                              # 切换到nanopolish的目录。
+
+rpath=${codedir}/s2.Combine_raw_nanopolish.R   # 定义R脚本的路径。
+file=${exptdir}/out_nanopolish/${expt}.gm2.nanopolish_eventAlignOut.txt  # 定义nanopolish输出文件的路径。
+head -n 1 $file > raw_nanopolish.header # 获取文件的第一行并保存为header。
+noline=$(wc -l $file | cut -d " " -f 1) # 获取文件的总行数。
+out=$(echo $file | sed -e "s/.txt/_combined.txt/g") # 定义输出文件的名称。
+tmp=tmp.nnpl                            # 定义临时文件的名称。
+
+echo $file                              # 打印文件路径。
+echo $noline                            # 打印文件的总行数。
+echo $out                               # 打印输出文件的名称。
+
+num=2                                   # 初始化行数为2。
+chunk=10000000                          # 定义每个块的行数。
+num1=$(expr $num + $chunk)              # 计算结束行数。
+num2=$(expr $num1 + 1)                  # 计算下一个开始行数。
+filecount=1                             # 初始化文件计数为1。
+
+while [ $num -le $noline ]              # 当开始行数小于或等于总行数时循环。
+do
+	sed -n "$num,${num1}p; ${num2}q" $file > $tmp  # 获取文件的指定行数并保存到临时文件。
+	chk=$(wc -l $tmp | cut -f 1 -d " ")  # 获取临时文件的行数。
+	echo Processing reads $num to $num1 in file $filecount  # 打印正在处理的行数和文件计数。
+
+	if [ $chk -gt 0 ]; then              # 如果临时文件的行数大于0。
+		Rscript $rpath -f $tmp -t $numcore -o ${out}.part${filecount} -s $noline -n $num -c $chunk  # 运行R脚本处理临时文件。
+		
+		if test -f tmp.eli; then         # 如果存在tmp.eli文件。
+			eli=$(cat tmp.eli)          # 获取tmp.eli文件的内容。
+			rm tmp.eli                  # 删除tmp.eli文件。
+		else
+			eli=0                       # 否则设置eli为0。
+		fi
+				
+	fi
+	num=$(( $num1 - $eli + 1 ))          # 更新开始行数。
+	num1=$(expr $num + $chunk)           # 更新结束行数。
+	num2=$(expr $num1 + 1)               # 更新下一个开始行数。
+	filecount=$(expr $filecount + 1)     # 更新文件计数。
+
+done
+cat ${codedir}/misc/nnpl.header > $out  # 将header内容写入输出文件。
+cat ${out}.part* | grep -v contig >> $out  # 将所有part文件的内容追加到输出文件。
+rm tmp.nnpl ${out}.part*                # 删除临时文件和所有part文件。
+ftdir=${exptdir}/raw_features           # 定义特征的目录。
+mv $out -t $ftdir                       # 将输出文件移动到特征的目录。
+
+
+
+
+##############################
+########################
+##################
+####### S3.Generate_raw_features.sh
+#这个脚本的目的是从处理后的TSV和nanopolish输出中提取特征，并生成一个特征表。
+#首先，它提取了TSV和nanopolish文件中的公共reads。然后，它分块处理这些reads，使用R脚本从这些reads中提取特征，并将这些特征保存到部分文件中。
+#最后，它合并所有部分文件到一个最终的特征文件，并将其移动到一个聚合目录中。
+
+#!/bin/bash
+
+# 定义输入参数
+exptdir=$1   # 实验目录
+numcore=$2   # 使用的核心数
+agggrp=$3    # 聚合组
+
+# 获取当前脚本的目录
+codedir=$(cd `dirname $0` && pwd)
+
+# 定义R脚本的路径
+rpath=${codedir}/s3.Generate_raw_feature_table.R
+
+# 获取实验目录的基本名称
+expt=$(basename ${exptdir})
+
+# 定义特征目录
+ftdir=${exptdir}/raw_features
+
+# 切换到特征目录
+cd $ftdir
+
+# 打印开始信息
+echo =========================================================================================
+echo "S3 Start: $(date)"
+
+# 定义变量名称
+nnpl=$expt.gm2.nanopolish_eventAlignOut_combined.txt
+tsv=${expt}.tsv.txt
+outname=${expt}.tsv_nnpl_inAE.txt
+intsv=${expt}.input.filteredSHN.tsv.txt
+innnpl=${expt}.input.nanopolish_eventAlignOut_combined.txt
+readtsv=${expt}.read.tsv
+readnnpl=${expt}.read.nnpl
+interread=${expt}.intersect.read
+
+# 步骤1 - 从tsv和nanopolish文件中提取公共的reads
+awk 'NR!=1 {print $1}' $tsv | LC_ALL=C uniq | LC_ALL=C sort -S 80% --parallel=$numcore  > $readtsv
+awk '{print $2}' $nnpl | LC_ALL=C uniq | LC_ALL=C sort -S 80% --parallel=$numcore  > $readnnpl
+comm -12 $readtsv $readnnpl > $interread
+
+# 定义循环变量
+num=1
+chunk=100000
+num1=$(expr $num + $chunk - 1)
+num2=$(expr $num1 + 1)
+noline=$(wc -l $interread | cut -d " " -f 1)
+filecount=1
+
+# 循环处理每个read块
+while [ $num -le $noline ]
+do
+    # 打印处理信息
+    echo Processing reads $num to $num1
+
+    # 从交集文件中提取当前块的reads
+    sed -n "$num,${num1}p; ${num2}q" $interread > readstmp
+    chk=$(wc -l readstmp | cut -f 1 -d " ")
+
+    # 如果当前块有reads，则进行处理
+    if [ $chk -gt 0 ]; then
+        # 添加头部信息
+        cat ${codedir}/misc/nnpl.header > $innnpl
+        cat ${codedir}/misc/tsv.header > $intsv
+
+        # 从tsv和nnpl文件中提取当前块的reads
+        LC_ALL=C grep -h -F -w -f readstmp $tsv >> $intsv
+        LC_ALL=C grep -h -F -w -f readstmp $nnpl >> $innnpl
+
+        # 步骤2 - 生成原始特征文件
+        Rscript $rpath -n $innnpl -t $intsv -o ${outname}.part$filecount
+
+        # 更新循环变量
+        num=$num2
+        num1=$(expr $num + $chunk - 1)
+        num2=$(expr $num1 + 1)
+        filecount=$(expr $filecount + 1)
+
+        # 删除临时文件
+        rm readstmp
+    fi
+done
+
+# 合并所有部分文件到最终的特征文件
+cat ${codedir}/misc/inae.header > $outname
+cat ${outname}.part*.positive | LC_ALL=C sort -k1,1 -k3,3n | grep -v contig >> $outname
+cat ${outname}.part*.negative | LC_ALL=C sort -k1,1 -k3,3n | grep -v contig >> $outname
+
+# 打印生成信息
+echo ${outname} generated on $(date)
+
+# 删除临时文件
+rm $readtsv $readnnpl $interread $intsv $innnpl ${outname}.part*.positive ${outname}.part*.negative
+
+# 创建聚合目录并移动最终的特征文件
+aggdir=$(dirname $exptdir)/aggregate_reads
+mkdir $aggdir
+mv $outname ${outname}_grp${agggrp}
+mv ${outname}_grp${agggrp} -t $aggdir
+
+# 打印结束信息
+echo -e S3 End: $(date) "\n"
+echo =========================================================================================
+
+
+
+######################################################## 这三个过程的总结
+########################################################
+########################################################
+########################################################
+1. Basecalling (S1.Basecall_map_nanopolish.sh)
+- 作用: 将原始的电信号数据（fast5文件）转换为DNA序列（fastq文件）。
+- 软件: guppy_basecaller
+- 输入文件:
+fast5文件：包含原始的电信号数据。
+- 生成的文件:
+fastq文件：包含DNA序列及其对应的质量分数。
+combined.fastq：所有fastq文件的集合。
+
+2. Mapping (S1.Basecall_map_nanopolish.sh)
+- 作用: 将basecalled的DNA序列映射到一个参考基因组。
+- 软件: graphmap2（可替换为minimap2）
+- 输入文件:
+combined.fastq：所有fastq文件的集合。
+ref：参考基因组文件。
+- 生成的文件:
+SAM文件：包含映射信息的文本文件。
+sorted.bam：排序后的二进制版本的SAM文件，用于后续分析。
+
+3. Nanopolish (S1.Basecall_map_nanopolish.sh)
+- 作用: 使用nanopolish对齐原始电信号事件与参考基因组。
+- 软件: nanopolish
+- 输入文件:
+sorted.bam：排序后的二进制版本的SAM文件。
+ref：参考基因组文件。
+- 生成的文件:
+nanopolish_eventAlignOut.txt：包含nanopolish的输出，描述了每个事件与参考基因组的对齐。
+
+4. Processing BAM and Nanopolish outputs (S2.Process_bam_nnpl.sh)
+- 作用: 转换BAM文件为TSV格式，并处理nanopolish的输出。
+- 软件: sam2tsv, R脚本
+- 输入文件:
+sorted.bam：排序后的二进制版本的SAM文件。
+nanopolish_eventAlignOut.txt：nanopolish的输出。
+- 生成的文件:
+tsv.txt：从BAM文件转换得到的TSV文件。
+nanopolish_eventAlignOut_combined.txt：处理后的nanopolish输出。
+
+5. Feature Generation (S3.Generate_raw_features.sh)
+- 作用: 从处理后的TSV和nanopolish输出中提取特征。
+- 软件: R脚本
+- 输入文件:
+tsv.txt：从BAM文件转换得到的TSV文件。
+nanopolish_eventAlignOut_combined.txt：处理后的nanopolish输出。
+- 生成的文件:
+tsv_nnpl_inAE.txt：包含从TSV和nanopolish输出中提取的原始特征的文件。
+
+结构上，fastq文件包含DNA序列及其对应的质量分数；SAM和BAM文件包含关于如何将DNA序列映射到参考基因组的信息；
+TSV文件是BAM文件的文本表示，而nanopolish的输出描述了每个事件与参考基因组的对齐；最后，tsv_nnpl_inAE.txt文件包含从前面的步骤中提取的特征。
+
+总的来说，这个流程从原始的测序数据开始，通过basecalling、映射、nanopolish处理，最终生成了描述DNA序列和其与参考基因组的对齐的特征。这些特征可以用于后续的分析，如变异检测或结构变异的识别。
+########################################################
