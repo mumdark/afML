@@ -1,23 +1,25 @@
-################### Ö÷ÎÄ¼ş£ºMainscript1.sh £¬Run Mainscript1.sh (Steps 1 to 3) on individual sequencing runs
-################### Õâ¸ö½Å±¾Ö÷ÒªÊÇÓÃÓÚ´¦ÀíÉúÎïĞÅÏ¢Ñ§Êı¾İ£¬¾ßÌåµØ£¬ËüÊÇÓÃÓÚ´¦Àínanopore²âĞòÊı¾İ¡£
-################### ½Å±¾Ê×ÏÈÉèÖÃÁËÒ»Ğ©»·¾³±äÁ¿ºÍÄ¬ÈÏÖµ£¬È»ºó½âÎöÃüÁîĞĞ²ÎÊı£¬²¢¸ù¾İÕâĞ©²ÎÊıÖ´ĞĞÈı¸ö²»Í¬µÄ½Å±¾£¬·Ö±ğ½øĞĞ»ùÒò×éÓ³Éä¡¢Êı¾İ´¦ÀíºÍÌØÕ÷ÌáÈ¡¡£
+https://github.com/darelab2014/Dinopore
 
-#!/usr/bin/env bash                 # Ö¸¶¨½Å±¾Ê¹ÓÃµÄ½âÊÍÆ÷Îªbash
-set -e                              # Èç¹ûÈÎºÎÃüÁîÖ´ĞĞÊ§°Ü£¬ÔòÍË³ö½Å±¾
+################### ä¸»æ–‡ä»¶ï¼šMainscript1.sh ï¼ŒRun Mainscript1.sh (Steps 1 to 3) on individual sequencing runs
+################### è¿™ä¸ªè„šæœ¬ä¸»è¦æ˜¯ç”¨äºå¤„ç†ç”Ÿç‰©ä¿¡æ¯å­¦æ•°æ®ï¼Œå…·ä½“åœ°ï¼Œå®ƒæ˜¯ç”¨äºå¤„ç†nanoporeæµ‹åºæ•°æ®ã€‚
+################### è„šæœ¬é¦–å…ˆè®¾ç½®äº†ä¸€äº›ç¯å¢ƒå˜é‡å’Œé»˜è®¤å€¼ï¼Œç„¶åè§£æå‘½ä»¤è¡Œå‚æ•°ï¼Œå¹¶æ ¹æ®è¿™äº›å‚æ•°æ‰§è¡Œä¸‰ä¸ªä¸åŒçš„è„šæœ¬ï¼Œåˆ†åˆ«è¿›è¡ŒåŸºå› ç»„æ˜ å°„ã€æ•°æ®å¤„ç†å’Œç‰¹å¾æå–ã€‚
 
-# ÕâÊÇ½ºÄÒµÄÖ÷½Å±¾¡£µ±Äúµã»÷"Reproducible Run"Ê±£¬´ËÎÄ¼şÖĞµÄ´úÂë½«Ö´ĞĞ¡£
+#!/usr/bin/env bash                 # æŒ‡å®šè„šæœ¬ä½¿ç”¨çš„è§£é‡Šå™¨ä¸ºbash
+set -e                              # å¦‚æœä»»ä½•å‘½ä»¤æ‰§è¡Œå¤±è´¥ï¼Œåˆ™é€€å‡ºè„šæœ¬
 
-codedir="/path/to/dinopore/code"    # ÉèÖÃ´úÂëÄ¿Â¼µÄÂ·¾¶
+# è¿™æ˜¯èƒ¶å›Šçš„ä¸»è„šæœ¬ã€‚å½“æ‚¨ç‚¹å‡»"Reproducible Run"æ—¶ï¼Œæ­¤æ–‡ä»¶ä¸­çš„ä»£ç å°†æ‰§è¡Œã€‚
 
-# ÉèÖÃÈı¸ö»·¾³±äÁ¿£¬ÓÃÓÚºóĞøµÄJavaÃüÁîºÍgraphmap2ÃüÁî
+codedir="/path/to/dinopore/code"    # è®¾ç½®ä»£ç ç›®å½•çš„è·¯å¾„
+
+# è®¾ç½®ä¸‰ä¸ªç¯å¢ƒå˜é‡ï¼Œç”¨äºåç»­çš„Javaå‘½ä»¤å’Œgraphmap2å‘½ä»¤
 export SAM2TSV="java -jar ${codedir}/misc/sam2tsv.jar"
 export PICARD="java -jar ${codedir}/misc/picard.jar"
 export graphmap2="${codedir}/misc/graphmap2"
 
-chmod 744 $graphmap2               # ĞŞ¸Ägraphmap2µÄÈ¨ÏŞÎª744
-delfastq=n                         # ÉèÖÃÄ¬ÈÏÖµÎªn
+chmod 744 $graphmap2               # ä¿®æ”¹graphmap2çš„æƒé™ä¸º744
+delfastq=n                         # è®¾ç½®é»˜è®¤å€¼ä¸ºn
 
-# ¶¨ÒåÒ»¸öº¯Êı£¬ÓÃÓÚ´òÓ¡°ïÖúĞÅÏ¢
+# å®šä¹‰ä¸€ä¸ªå‡½æ•°ï¼Œç”¨äºæ‰“å°å¸®åŠ©ä¿¡æ¯
 usage() {
     echo ""
     echo "Usage: $0 [ -e PATH/TO/EXPTDIR ] [ -r PATH/TO/REFERENCE.FASTA ] [ -n num_threads ] [ -g aggregateGroup ]" 1>&2
@@ -27,13 +29,13 @@ usage() {
     echo ""
 }
 
-# ¶¨ÒåÒ»¸öº¯Êı£¬ÓÃÓÚÒì³£ÍË³ö
+# å®šä¹‰ä¸€ä¸ªå‡½æ•°ï¼Œç”¨äºå¼‚å¸¸é€€å‡º
 exit_abnormal() {
   usage
   exit 1
 }
 
-# Ê¹ÓÃgetopts½âÎöÃüÁîĞĞ²ÎÊı
+# ä½¿ç”¨getoptsè§£æå‘½ä»¤è¡Œå‚æ•°
 while getopts ":e:r:n:g:d:" options; do
   case "${options}" in
     e) exptdir=${OPTARG} ;;
@@ -59,7 +61,7 @@ while getopts ":e:r:n:g:d:" options; do
   esac
 done
 
-# ¼ì²é±ØÒªµÄ²ÎÊıÊÇ·ñÒÑÌá¹©
+# æ£€æŸ¥å¿…è¦çš„å‚æ•°æ˜¯å¦å·²æä¾›
 if [ "$exptdir" = "" ]; then
         echo "Error: please provide path to experiment directory."
         exit_abnormal
@@ -80,7 +82,7 @@ if [ "$agggrp" = "" ]; then
         exit_abnormal
 fi
 
-# ¸ù¾İdelfastqµÄÖµ£¬¾ö¶¨ÊÇ·ñÉ¾³ıFASTQÎÄ¼ş
+# æ ¹æ®delfastqçš„å€¼ï¼Œå†³å®šæ˜¯å¦åˆ é™¤FASTQæ–‡ä»¶
 if [ "$delfastq" = "" ]; then
   delfastq=n
 elif [ "$delfastq" = "n" ]; then
@@ -98,7 +100,7 @@ else
   exit_abnormal
 fi
 
-# Ö´ĞĞÈı¸ö²½ÖèµÄ½Å±¾
+# æ‰§è¡Œä¸‰ä¸ªæ­¥éª¤çš„è„šæœ¬
 sh ${codedir}/S1.Basecall_map_nanopolish.sh $exptdir $ref $numcore $delfastq
 sh ${codedir}/S2.Process_bam_nnpl.sh $exptdir $ref $numcore
 sh ${codedir}/S3.Generate_raw_features.sh $exptdir $numcore $agggrp
@@ -107,74 +109,74 @@ sh ${codedir}/S3.Generate_raw_features.sh $exptdir $numcore $agggrp
 ########################
 ##################
 ####### S1.Basecall_map_nanopolish.sh
-#Õâ¸ö½Å±¾ÊÇÓÃÓÚ´¦ÀíÉúÎïĞÅÏ¢Ñ§Êı¾İµÄ£¬ÌØ±ğÊÇÓÃÓÚ´¦Àínanopore²âĞòÊı¾İ¡£
-#½Å±¾Ê×ÏÈÉèÖÃÁËÒ»Ğ©»ù±¾µÄ²ÎÊı£¬ÈçflowcellºÍkitµÄÀàĞÍ¡£È»ºó£¬Ëü¶¨ÒåÁËÒ»ÏµÁĞµÄÎÄ¼şºÍÄ¿Â¼Â·¾¶£¬ÓÃÓÚºóĞøµÄÊı¾İ´¦Àí¡£
-#½ÓÏÂÀ´£¬½Å±¾Ö´ĞĞÁË¼¸¸öÖ÷ÒªµÄ²½Öè£¬°üÀ¨´Ófast5ÎÄ¼ş½øĞĞbasecalling£¬½«ËùÓĞµÄfastqÎÄ¼şºÏ²¢ÎªÒ»¸ö£¬
-#Ó³Éäreadsµ½²Î¿¼»ùÒò×é£¬Ë÷ÒıbamÎÄ¼ş£¬ÒÔ¼°Ê¹ÓÃnanopolish½øĞĞÊı¾İ·ÖÎö¡£Ã¿¸ö²½Öè¶¼ÓĞÏêÏ¸µÄ×¢ÊÍËµÃ÷Æä¹¦ÄÜ¡£
+#è¿™ä¸ªè„šæœ¬æ˜¯ç”¨äºå¤„ç†ç”Ÿç‰©ä¿¡æ¯å­¦æ•°æ®çš„ï¼Œç‰¹åˆ«æ˜¯ç”¨äºå¤„ç†nanoporeæµ‹åºæ•°æ®ã€‚
+#è„šæœ¬é¦–å…ˆè®¾ç½®äº†ä¸€äº›åŸºæœ¬çš„å‚æ•°ï¼Œå¦‚flowcellå’Œkitçš„ç±»å‹ã€‚ç„¶åï¼Œå®ƒå®šä¹‰äº†ä¸€ç³»åˆ—çš„æ–‡ä»¶å’Œç›®å½•è·¯å¾„ï¼Œç”¨äºåç»­çš„æ•°æ®å¤„ç†ã€‚
+#æ¥ä¸‹æ¥ï¼Œè„šæœ¬æ‰§è¡Œäº†å‡ ä¸ªä¸»è¦çš„æ­¥éª¤ï¼ŒåŒ…æ‹¬ä»fast5æ–‡ä»¶è¿›è¡Œbasecallingï¼Œå°†æ‰€æœ‰çš„fastqæ–‡ä»¶åˆå¹¶ä¸ºä¸€ä¸ªï¼Œ
+#æ˜ å°„readsåˆ°å‚è€ƒåŸºå› ç»„ï¼Œç´¢å¼•bamæ–‡ä»¶ï¼Œä»¥åŠä½¿ç”¨nanopolishè¿›è¡Œæ•°æ®åˆ†æã€‚æ¯ä¸ªæ­¥éª¤éƒ½æœ‰è¯¦ç»†çš„æ³¨é‡Šè¯´æ˜å…¶åŠŸèƒ½ã€‚
 
-#!/bin/bash                          # Ö¸¶¨½Å±¾Ê¹ÓÃµÄ½âÊÍÆ÷Îªbash
+#!/bin/bash                          # æŒ‡å®šè„šæœ¬ä½¿ç”¨çš„è§£é‡Šå™¨ä¸ºbash
 
-flowcell=FLO-MIN106                  # ÉèÖÃflowcell±äÁ¿µÄÖµÎªFLO-MIN106
-kit=SQK-RNA002                       # ÉèÖÃkit±äÁ¿µÄÖµÎªSQK-RNA002
+flowcell=FLO-MIN106                  # è®¾ç½®flowcellå˜é‡çš„å€¼ä¸ºFLO-MIN106
+kit=SQK-RNA002                       # è®¾ç½®kitå˜é‡çš„å€¼ä¸ºSQK-RNA002
 
-# ´òÓ¡ÔËĞĞÏêÇé²¢¶¨Òå±äÁ¿Ãû
+# æ‰“å°è¿è¡Œè¯¦æƒ…å¹¶å®šä¹‰å˜é‡å
 echo =========================================================================================
-echo "S1 Start: $(date)"             # ´òÓ¡µ±Ç°ÈÕÆÚºÍÊ±¼ä
-echo Flowcell used: $flowcell       # ´òÓ¡flowcellµÄÖµ
-echo Sequencing kit used: $kit      # ´òÓ¡kitµÄÖµ
+echo "S1 Start: $(date)"             # æ‰“å°å½“å‰æ—¥æœŸå’Œæ—¶é—´
+echo Flowcell used: $flowcell       # æ‰“å°flowcellçš„å€¼
+echo Sequencing kit used: $kit      # æ‰“å°kitçš„å€¼
 
-# ¶¨Òå±äÁ¿
-exptdir=$1                          # µÚÒ»¸öÃüÁîĞĞ²ÎÊı£¬Ñù±¾ÎÄ¼ş¼ĞµÄÄ¿Â¼
-ref=$2                              # µÚ¶ş¸öÃüÁîĞĞ²ÎÊı£¬²Î¿¼ĞòÁĞ
-numcore=$3                          # µÚÈı¸öÃüÁîĞĞ²ÎÊı£¬ºËĞÄÊı
-delfastq=$4                         # µÚËÄ¸öÃüÁîĞĞ²ÎÊı£¬ÊÇ·ñÉ¾³ıfastqÎÄ¼ş
+# å®šä¹‰å˜é‡
+exptdir=$1                          # ç¬¬ä¸€ä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œæ ·æœ¬æ–‡ä»¶å¤¹çš„ç›®å½•
+ref=$2                              # ç¬¬äºŒä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œå‚è€ƒåºåˆ—
+numcore=$3                          # ç¬¬ä¸‰ä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œæ ¸å¿ƒæ•°
+delfastq=$4                         # ç¬¬å››ä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œæ˜¯å¦åˆ é™¤fastqæ–‡ä»¶
 
-expt=$(basename $exptdir)           # »ñÈ¡exptdirµÄ»ù±¾Ãû
-fast5dir=${exptdir}/fast5           # ¶¨Òåfast5ÎÄ¼şµÄÄ¿Â¼
-fqdir=${exptdir}/out_fastq_bam      # ¶¨ÒåfastqºÍbamÎÄ¼şµÄÊä³öÄ¿Â¼
-npdir=${exptdir}/out_nanopolish     # ¶¨ÒånanopolishÊä³öÄ¿Â¼
-fqCombined=${expt}.combined.fastq   # ¶¨Òå×éºÏfastqÎÄ¼şµÄÃû³Æ
-fq=$fqdir/$fqCombined               # ¶¨ÒåÍêÕûµÄfastqÎÄ¼şÂ·¾¶
-sam=${expt}.combined.gm2.sam        # ¶¨ÒåsamÎÄ¼şµÄÃû³Æ
-sortedBam=$expt.sorted.bam          # ¶¨ÒåÅÅĞòºóµÄbamÎÄ¼şÃû³Æ
-npsummary=$expt.$(basename $ref).gm2.nanopolish.sum # ¶¨ÒånanopolishÕªÒªÎÄ¼şµÄÃû³Æ
-np_out=$npdir/$expt.gm2.nanopolish_eventAlignOut.txt # ¶¨ÒånanopolishÊä³öÎÄ¼şµÄÃû³Æ
+expt=$(basename $exptdir)           # è·å–exptdirçš„åŸºæœ¬å
+fast5dir=${exptdir}/fast5           # å®šä¹‰fast5æ–‡ä»¶çš„ç›®å½•
+fqdir=${exptdir}/out_fastq_bam      # å®šä¹‰fastqå’Œbamæ–‡ä»¶çš„è¾“å‡ºç›®å½•
+npdir=${exptdir}/out_nanopolish     # å®šä¹‰nanopolishè¾“å‡ºç›®å½•
+fqCombined=${expt}.combined.fastq   # å®šä¹‰ç»„åˆfastqæ–‡ä»¶çš„åç§°
+fq=$fqdir/$fqCombined               # å®šä¹‰å®Œæ•´çš„fastqæ–‡ä»¶è·¯å¾„
+sam=${expt}.combined.gm2.sam        # å®šä¹‰samæ–‡ä»¶çš„åç§°
+sortedBam=$expt.sorted.bam          # å®šä¹‰æ’åºåçš„bamæ–‡ä»¶åç§°
+npsummary=$expt.$(basename $ref).gm2.nanopolish.sum # å®šä¹‰nanopolishæ‘˜è¦æ–‡ä»¶çš„åç§°
+np_out=$npdir/$expt.gm2.nanopolish_eventAlignOut.txt # å®šä¹‰nanopolishè¾“å‡ºæ–‡ä»¶çš„åç§°
 
-cd $exptdir                         # ÇĞ»»µ½ÊµÑéÄ¿Â¼
-mkdir -p $fqdir $npdir              # ´´½¨Êä³öÄ¿Â¼
+cd $exptdir                         # åˆ‡æ¢åˆ°å®éªŒç›®å½•
+mkdir -p $fqdir $npdir              # åˆ›å»ºè¾“å‡ºç›®å½•
 
-# µÚ1²½ - Ê¹ÓÃguppy´Ófast5/½øĞĞbasecall
+# ç¬¬1æ­¥ - ä½¿ç”¨guppyä»fast5/è¿›è¡Œbasecall
 guppy_basecaller -i $fast5dir -s $fqdir --flowcell $flowcell --kit $kit --cpu_threads_per_caller 12 -r
 
-# µÚ2²½ - ½«ËùÓĞfastqÎÄ¼şºÏ²¢ÎªÒ»¸öÖ÷fastqÎÄ¼ş"*.combined.fastq"
+# ç¬¬2æ­¥ - å°†æ‰€æœ‰fastqæ–‡ä»¶åˆå¹¶ä¸ºä¸€ä¸ªä¸»fastqæ–‡ä»¶"*.combined.fastq"
 cd $fqdir
 #rm $fqCombined
 #cat *.fastq > $fqCombined
 #echo All fastq have been combined.
 
-# ¸ù¾İdelfastqµÄÖµ¾ö¶¨ÊÇ·ñÉ¾³ıFASTQÎÄ¼ş
+# æ ¹æ®delfastqçš„å€¼å†³å®šæ˜¯å¦åˆ é™¤FASTQæ–‡ä»¶
 if [ "$delfastq" = "y" ]; then
  find . -maxdepth 1 -type f -name '*.fastq' -a ! -name '*.combined.fastq' -delete
 elif [ "$delfastq" = "n" ]; then
  echo "Base-called FASTQ files preserved. Proceeding to map reads."
 fi
 
-# µÚ3²½ - Ó³Éäµ½²Î¿¼»ùÒò×é¡£Éú³ÉsamÎÄ¼ş
-sed -i 's/U/T/g' $fqCombined         # ½«ÎÄ¼ş$fqCombinedÖĞµÄËùÓĞU×Ö·ûÌæ»»ÎªT×Ö·û
+# ç¬¬3æ­¥ - æ˜ å°„åˆ°å‚è€ƒåŸºå› ç»„ã€‚ç”Ÿæˆsamæ–‡ä»¶
+sed -i 's/U/T/g' $fqCombined         # å°†æ–‡ä»¶$fqCombinedä¸­çš„æ‰€æœ‰Uå­—ç¬¦æ›¿æ¢ä¸ºTå­—ç¬¦
 $graphmap2 align -x rnaseq -t $numcore -r $ref -d $fqCombined -o $sam
 # minimap2 -ax map-ont -t $numcore $ref $fqCombined > $sam
 
-# µÚ4²½ - Ë÷Òıbam²¢Éú³ÉÍ³¼ÆĞÅÏ¢ - ¸²¸ÇÂÊ¡¢´íÎóÂÊ¡¢¶ÁÈ¡´ÎÊı
-samtools view -@ $numcore -S $sam -b | samtools sort -o $sortedBam - ; samtools index $sortedBam # Õâ¸öÃüÁîĞĞÊ×ÏÈ½«Ò»¸öSAMÎÄ¼ş×ª»»ÎªBAM¸ñÊ½£¬È»ºó¶ÔBAMÎÄ¼ş½øĞĞÅÅĞò£¬²¢ÎªÅÅĞòºóµÄBAMÎÄ¼ş´´½¨Ò»¸öË÷Òı
+# ç¬¬4æ­¥ - ç´¢å¼•bamå¹¶ç”Ÿæˆç»Ÿè®¡ä¿¡æ¯ - è¦†ç›–ç‡ã€é”™è¯¯ç‡ã€è¯»å–æ¬¡æ•°
+samtools view -@ $numcore -S $sam -b | samtools sort -o $sortedBam - ; samtools index $sortedBam # è¿™ä¸ªå‘½ä»¤è¡Œé¦–å…ˆå°†ä¸€ä¸ªSAMæ–‡ä»¶è½¬æ¢ä¸ºBAMæ ¼å¼ï¼Œç„¶åå¯¹BAMæ–‡ä»¶è¿›è¡Œæ’åºï¼Œå¹¶ä¸ºæ’åºåçš„BAMæ–‡ä»¶åˆ›å»ºä¸€ä¸ªç´¢å¼•
 
-# µÚ5²½ - ÔÚÖ÷ÎÄ¼ş¼ĞÖĞ£¬Ê¹ÓÃnanopolish indexË÷Òıfast5µ½fastq
-#Õâ¸öÃüÁîµÄÄ¿µÄÊÇÎªºóĞøµÄnanopolish²½Öè´´½¨Ò»¸öË÷Òı£¬Õâ¸öË÷Òı½«FASTQÎÄ¼şÖĞµÄĞòÁĞÓëÔ­Ê¼µÄFAST5ÎÄ¼şÖĞµÄµçÁ÷ĞÅºÅÊı¾İ¹ØÁªÆğÀ´¡£
-#ÕâÑù£¬µ±nanopolishÔÚºóĞø²½ÖèÖĞĞèÒª·ÃÎÊÔ­Ê¼µÄµçÁ÷ĞÅºÅÊı¾İÊ±£¬Ëü¿ÉÒÔ¿ìËÙÕÒµ½Ïà¹ØµÄFAST5ÎÄ¼ş¡£
+# ç¬¬5æ­¥ - åœ¨ä¸»æ–‡ä»¶å¤¹ä¸­ï¼Œä½¿ç”¨nanopolish indexç´¢å¼•fast5åˆ°fastq
+#è¿™ä¸ªå‘½ä»¤çš„ç›®çš„æ˜¯ä¸ºåç»­çš„nanopolishæ­¥éª¤åˆ›å»ºä¸€ä¸ªç´¢å¼•ï¼Œè¿™ä¸ªç´¢å¼•å°†FASTQæ–‡ä»¶ä¸­çš„åºåˆ—ä¸åŸå§‹çš„FAST5æ–‡ä»¶ä¸­çš„ç”µæµä¿¡å·æ•°æ®å…³è”èµ·æ¥ã€‚
+#è¿™æ ·ï¼Œå½“nanopolishåœ¨åç»­æ­¥éª¤ä¸­éœ€è¦è®¿é—®åŸå§‹çš„ç”µæµä¿¡å·æ•°æ®æ—¶ï¼Œå®ƒå¯ä»¥å¿«é€Ÿæ‰¾åˆ°ç›¸å…³çš„FAST5æ–‡ä»¶ã€‚
 nanopolish index -d $fast5dir/ $fq
 
-# µÚ6²½ - ÔËĞĞnanopolishÎªfastqÎÄ¼ş£¬´Óminimap2Éú³ÉµÄ²İÍ¼»ùÒò×é×é×°¼ÆËã¸Ä½øµÄÒ»ÖÂĞÔĞòÁĞ
-#Õâ¸öÃüÁîµÄÖ÷ÒªÄ¿µÄÊÇ¶ÔÆë£¨»ò±È½Ï£©Ô­Ê¼µÄ²âĞòĞÅºÅÓë²Î¿¼»ùÒò×é¡£
-#Ëü²»½ö½öÊÇ±È¶Ô¼î»ùĞòÁĞ£¬¶øÊÇ±È¶ÔÔ­Ê¼µÄµçĞÅºÅÊı¾İÓë²Î¿¼ĞòÁĞ¡£
+# ç¬¬6æ­¥ - è¿è¡Œnanopolishä¸ºfastqæ–‡ä»¶ï¼Œä»minimap2ç”Ÿæˆçš„è‰å›¾åŸºå› ç»„ç»„è£…è®¡ç®—æ”¹è¿›çš„ä¸€è‡´æ€§åºåˆ—
+#è¿™ä¸ªå‘½ä»¤çš„ä¸»è¦ç›®çš„æ˜¯å¯¹é½ï¼ˆæˆ–æ¯”è¾ƒï¼‰åŸå§‹çš„æµ‹åºä¿¡å·ä¸å‚è€ƒåŸºå› ç»„ã€‚
+#å®ƒä¸ä»…ä»…æ˜¯æ¯”å¯¹ç¢±åŸºåºåˆ—ï¼Œè€Œæ˜¯æ¯”å¯¹åŸå§‹çš„ç”µä¿¡å·æ•°æ®ä¸å‚è€ƒåºåˆ—ã€‚
 nanopolish eventalign --reads $fq --bam $sortedBam --genome $ref --summary $npsummary --print-read-names --threads $numcore --scale-events > $np_out
 
 echo -e S1 End: $(date) "\n"
@@ -185,141 +187,141 @@ echo ===========================================================================
 ########################
 ##################
 ####### S2.Process_bam_nnpl.sh
-#Õâ¸ö½Å±¾Ö÷ÒªÓÃÓÚ´¦ÀíÉúÎïĞÅÏ¢Ñ§Êı¾İ£¬ÌØ±ğÊÇÓësam2tsvºÍnanopolishÏà¹ØµÄÊı¾İ¡£
-#½Å±¾Ê×ÏÈÉèÖÃÁËÒ»Ğ©»ù±¾µÄ²ÎÊıºÍÂ·¾¶¡£½Ó×Å£¬Ëü¼ì²éÊÇ·ñ´æÔÚÒ»¸öĞòÁĞ×ÖµäÎÄ¼ş£¬Èç¹û²»´æÔÚ£¬Ëü½«Ê¹ÓÃPICARD¹¤¾ß´´½¨Ò»¸ö¡£
-#È»ºó£¬½Å±¾ÔËĞĞÁ½¸ö×Ó½Å±¾£ºÒ»¸öÓÃÓÚ´¦Àísam2tsvµÄÊä³ö£¬ÁíÒ»¸öÓÃÓÚ´¦ÀínanopolishµÄÔ­Ê¼Êı¾İ¡£
-#ÕâÁ½¸ö×Ó½Å±¾¶¼ÔÚµ±Ç°½Å±¾ËùÔÚµÄÄ¿Â¼ÖĞ£¬²¢ÇÒËüÃÇ¶¼ĞèÒªÒ»Ğ©²ÎÊı£¬ÈçÊµÑéÄ¿Â¼¡¢²Î¿¼ĞòÁĞºÍºËĞÄÊı¡£×îºó£¬½Å±¾´òÓ¡½áÊøÊ±¼ä¡£
-#!/bin/bash                           # Ö¸¶¨½Å±¾Ê¹ÓÃµÄ½âÊÍÆ÷Îªbash
+#è¿™ä¸ªè„šæœ¬ä¸»è¦ç”¨äºå¤„ç†ç”Ÿç‰©ä¿¡æ¯å­¦æ•°æ®ï¼Œç‰¹åˆ«æ˜¯ä¸sam2tsvå’Œnanopolishç›¸å…³çš„æ•°æ®ã€‚
+#è„šæœ¬é¦–å…ˆè®¾ç½®äº†ä¸€äº›åŸºæœ¬çš„å‚æ•°å’Œè·¯å¾„ã€‚æ¥ç€ï¼Œå®ƒæ£€æŸ¥æ˜¯å¦å­˜åœ¨ä¸€ä¸ªåºåˆ—å­—å…¸æ–‡ä»¶ï¼Œå¦‚æœä¸å­˜åœ¨ï¼Œå®ƒå°†ä½¿ç”¨PICARDå·¥å…·åˆ›å»ºä¸€ä¸ªã€‚
+#ç„¶åï¼Œè„šæœ¬è¿è¡Œä¸¤ä¸ªå­è„šæœ¬ï¼šä¸€ä¸ªç”¨äºå¤„ç†sam2tsvçš„è¾“å‡ºï¼Œå¦ä¸€ä¸ªç”¨äºå¤„ç†nanopolishçš„åŸå§‹æ•°æ®ã€‚
+#è¿™ä¸¤ä¸ªå­è„šæœ¬éƒ½åœ¨å½“å‰è„šæœ¬æ‰€åœ¨çš„ç›®å½•ä¸­ï¼Œå¹¶ä¸”å®ƒä»¬éƒ½éœ€è¦ä¸€äº›å‚æ•°ï¼Œå¦‚å®éªŒç›®å½•ã€å‚è€ƒåºåˆ—å’Œæ ¸å¿ƒæ•°ã€‚æœ€åï¼Œè„šæœ¬æ‰“å°ç»“æŸæ—¶é—´ã€‚
+#!/bin/bash                           # æŒ‡å®šè„šæœ¬ä½¿ç”¨çš„è§£é‡Šå™¨ä¸ºbash
 
-exptdir=$1                            # µÚÒ»¸öÃüÁîĞĞ²ÎÊı£¬ÊµÑéÄ¿Â¼
-ref=$2                                # µÚ¶ş¸öÃüÁîĞĞ²ÎÊı£¬²Î¿¼ĞòÁĞ
-numcore=$3                            # µÚÈı¸öÃüÁîĞĞ²ÎÊı£¬ºËĞÄÊı
+exptdir=$1                            # ç¬¬ä¸€ä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œå®éªŒç›®å½•
+ref=$2                                # ç¬¬äºŒä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œå‚è€ƒåºåˆ—
+numcore=$3                            # ç¬¬ä¸‰ä¸ªå‘½ä»¤è¡Œå‚æ•°ï¼Œæ ¸å¿ƒæ•°
 
-codedir=$(cd $(dirname $0) && pwd)     # »ñÈ¡µ±Ç°½Å±¾ËùÔÚµÄÄ¿Â¼Â·¾¶
+codedir=$(cd $(dirname $0) && pwd)     # è·å–å½“å‰è„šæœ¬æ‰€åœ¨çš„ç›®å½•è·¯å¾„
 
-expt=$(basename ${exptdir})           # »ñÈ¡ÊµÑéÄ¿Â¼µÄ»ù±¾Ãû
-fqdir=${exptdir}/out_fastq_bam        # ¶¨ÒåfastqºÍbamÎÄ¼şµÄÊä³öÄ¿Â¼
-npdir=${exptdir}/out_nanopolish       # ¶¨ÒånanopolishÊä³öÄ¿Â¼
-dict=$(echo $ref | sed 's/.fasta//g' | sed 's/.fa//g').dict # ´Ó²Î¿¼ĞòÁĞÎÄ¼şÃûÖĞÒÆ³ı.fasta»ò.faÀ©Õ¹Ãû£¬²¢Ìí¼Ó.dictÀ©Õ¹Ãû
+expt=$(basename ${exptdir})           # è·å–å®éªŒç›®å½•çš„åŸºæœ¬å
+fqdir=${exptdir}/out_fastq_bam        # å®šä¹‰fastqå’Œbamæ–‡ä»¶çš„è¾“å‡ºç›®å½•
+npdir=${exptdir}/out_nanopolish       # å®šä¹‰nanopolishè¾“å‡ºç›®å½•
+dict=$(echo $ref | sed 's/.fasta//g' | sed 's/.fa//g').dict # ä»å‚è€ƒåºåˆ—æ–‡ä»¶åä¸­ç§»é™¤.fastaæˆ–.faæ‰©å±•åï¼Œå¹¶æ·»åŠ .dictæ‰©å±•å
 
 echo =========================================================================================
-echo "S2 Start: $(date)"               # ´òÓ¡µ±Ç°ÈÕÆÚºÍÊ±¼ä
+echo "S2 Start: $(date)"               # æ‰“å°å½“å‰æ—¥æœŸå’Œæ—¶é—´
 
 # Part 1 - sam2tsv
-# Step 1 - ´´½¨ĞòÁĞ×Öµä
-if [ ! -f "$dict" ]; then              # Èç¹ûĞòÁĞ×ÖµäÎÄ¼ş²»´æÔÚ
+# Step 1 - åˆ›å»ºåºåˆ—å­—å…¸
+if [ ! -f "$dict" ]; then              # å¦‚æœåºåˆ—å­—å…¸æ–‡ä»¶ä¸å­˜åœ¨
 	echo Sequence dictionary not found. Creating sequence dictionary.
-	$PICARD CreateSequenceDictionary R=$ref O=$dict # Ê¹ÓÃPICARD¹¤¾ß´´½¨ĞòÁĞ×Öµä
+	$PICARD CreateSequenceDictionary R=$ref O=$dict # ä½¿ç”¨PICARDå·¥å…·åˆ›å»ºåºåˆ—å­—å…¸
 else
-	echo Sequence dictionary found.    # Èç¹ûĞòÁĞ×ÖµäÎÄ¼ş´æÔÚ£¬´òÓ¡ÏûÏ¢
+	echo Sequence dictionary found.    # å¦‚æœåºåˆ—å­—å…¸æ–‡ä»¶å­˜åœ¨ï¼Œæ‰“å°æ¶ˆæ¯
 fi
 
-# Step 2 - ÔËĞĞsam2tsv²¢´¦ÀítsvÎÄ¼ş
+# Step 2 - è¿è¡Œsam2tsvå¹¶å¤„ç†tsvæ–‡ä»¶
 sh ${codedir}/s2.Sam2tsv_processtsv.sh $fqdir $expt $exptdir $ref $numcore
 
-# Part 2 - ´¦ÀíÔ­Ê¼nanopolishÎÄ¼ş
+# Part 2 - å¤„ç†åŸå§‹nanopolishæ–‡ä»¶
 sh ${codedir}/s2.Combine_raw_nnpl.sh $npdir $expt $exptdir $numcore
 
-echo -e S2 End: $(date) "\n"           # ´òÓ¡µ±Ç°ÈÕÆÚºÍÊ±¼ä
+echo -e S2 End: $(date) "\n"           # æ‰“å°å½“å‰æ—¥æœŸå’Œæ—¶é—´
 echo =========================================================================================
 
 ###
 #####
 #######
-##########¶ÔÓÚs2.Sam2tsv_processtsv.sh
+##########å¯¹äºs2.Sam2tsv_processtsv.sh
 ######
 ###
-#Õâ¸ö½Å±¾µÄÖ÷ÒªÄ¿µÄÊÇ½«bamÎÄ¼ş×ª»»ÎªtsvÎÄ¼ş£¬²¢½øĞĞÒ»ÏµÁĞµÄ´¦Àí£¬
-#ÈçÉ¾³ıÄ³Ğ©ĞĞ¡¢Ìæ»»NAÖµ¡¢¸ñÊ½»¯Õı¸º×¢ÊÍµÈ¡£´¦ÀíºóµÄtsvÎÄ¼ş½«±»±£´æÔÚÒ»¸öÌØ¶¨µÄÄ¿Â¼ÖĞ¡£
-#!/bin/bash                           # Ö¸¶¨½Å±¾Ê¹ÓÃµÄ½âÊÍÆ÷Îªbash¡£
+#è¿™ä¸ªè„šæœ¬çš„ä¸»è¦ç›®çš„æ˜¯å°†bamæ–‡ä»¶è½¬æ¢ä¸ºtsvæ–‡ä»¶ï¼Œå¹¶è¿›è¡Œä¸€ç³»åˆ—çš„å¤„ç†ï¼Œ
+#å¦‚åˆ é™¤æŸäº›è¡Œã€æ›¿æ¢NAå€¼ã€æ ¼å¼åŒ–æ­£è´Ÿæ³¨é‡Šç­‰ã€‚å¤„ç†åçš„tsvæ–‡ä»¶å°†è¢«ä¿å­˜åœ¨ä¸€ä¸ªç‰¹å®šçš„ç›®å½•ä¸­ã€‚
+#!/bin/bash                           # æŒ‡å®šè„šæœ¬ä½¿ç”¨çš„è§£é‡Šå™¨ä¸ºbashã€‚
 
-#Note: remember to unzip fasta        # ×¢ÊÍÌáĞÑÓÃ»§¼ÇµÃ½âÑ¹fastaÎÄ¼ş¡£
-#This script is used to convert bam file into tsv file, then process it (remove S, H and N, only keep M (match or mismatch), D (deletion) and I (insertion). Then replace NA in called base, format positive and negative annotation) # ×¢ÊÍËµÃ÷´Ë½Å±¾µÄÖ÷Òª¹¦ÄÜ¡£
+#Note: remember to unzip fasta        # æ³¨é‡Šæé†’ç”¨æˆ·è®°å¾—è§£å‹fastaæ–‡ä»¶ã€‚
+#This script is used to convert bam file into tsv file, then process it (remove S, H and N, only keep M (match or mismatch), D (deletion) and I (insertion). Then replace NA in called base, format positive and negative annotation) # æ³¨é‡Šè¯´æ˜æ­¤è„šæœ¬çš„ä¸»è¦åŠŸèƒ½ã€‚
 
-fqdir=$1                               # ¶¨ÒåfastqÎÄ¼şµÄÄ¿Â¼¡£
-expt=$2                                # ¶¨ÒåÊµÑéµÄÃû³Æ¡£
-exptdir=$3                             # ¶¨ÒåÊµÑéµÄÄ¿Â¼¡£
-ref=$4                                 # ¶¨Òå²Î¿¼ĞòÁĞ¡£
-numcore=$5                             # ¶¨ÒåÒªÊ¹ÓÃµÄºËĞÄÊı¡£
+fqdir=$1                               # å®šä¹‰fastqæ–‡ä»¶çš„ç›®å½•ã€‚
+expt=$2                                # å®šä¹‰å®éªŒçš„åç§°ã€‚
+exptdir=$3                             # å®šä¹‰å®éªŒçš„ç›®å½•ã€‚
+ref=$4                                 # å®šä¹‰å‚è€ƒåºåˆ—ã€‚
+numcore=$5                             # å®šä¹‰è¦ä½¿ç”¨çš„æ ¸å¿ƒæ•°ã€‚
 
-cd $fqdir                              # ÇĞ»»µ½fastqÎÄ¼şµÄÄ¿Â¼¡£
+cd $fqdir                              # åˆ‡æ¢åˆ°fastqæ–‡ä»¶çš„ç›®å½•ã€‚
 
-sortedBam=$expt.sorted.bam             # ¶¨ÒåÅÅĞòºóµÄbamÎÄ¼şµÄÃû³Æ¡£
-final=$expt.tsv.txt                    # ¶¨Òå×îÖÕµÄtsvÎÄ¼şµÄÃû³Æ¡£
-ftdir=${exptdir}/raw_features          # ¶¨ÒåÔ­Ê¼ÌØÕ÷µÄÄ¿Â¼¡£
+sortedBam=$expt.sorted.bam             # å®šä¹‰æ’åºåçš„bamæ–‡ä»¶çš„åç§°ã€‚
+final=$expt.tsv.txt                    # å®šä¹‰æœ€ç»ˆçš„tsvæ–‡ä»¶çš„åç§°ã€‚
+ftdir=${exptdir}/raw_features          # å®šä¹‰åŸå§‹ç‰¹å¾çš„ç›®å½•ã€‚
 
-mkdir -p $ftdir                        # ´´½¨Ô­Ê¼ÌØÕ÷µÄÄ¿Â¼£¨Èç¹û²»´æÔÚ£©¡£
+mkdir -p $ftdir                        # åˆ›å»ºåŸå§‹ç‰¹å¾çš„ç›®å½•ï¼ˆå¦‚æœä¸å­˜åœ¨ï¼‰ã€‚
 
 #Process tsv file to remove S, H and N, only keep M (match or mismatch), D (deletion) and I (insertion). Then replace NA in called base, format positive and negative annotation
 samtools view -@ $numcore -h -F 4 $sortedBam | $SAM2TSV -r $ref | awk 'BEGIN{FS=OFS="\t"} ($9 != "S") && ($9 != "H") && ($9 != "N")' - | awk 'BEGIN{FS=OFS="\t"} ($7=="."){$7="-99";} ($4=="."){$4="-99"} ($5=="."){$5="na"} ($8=="."){$8="na"} ($9=="D"){$6=" "} ($2==16){$2="n"} ($2==0){$2="p"} 1' > $final
-                                        # Ê¹ÓÃ`samtools`²é¿´²¢¹ıÂËbamÎÄ¼ş£¬È»ºóÊ¹ÓÃ`SAM2TSV`½«Æä×ª»»Îªtsv¸ñÊ½¡£½Ó×Å£¬Ê¹ÓÃ`awk`ÃüÁî½øĞĞ½øÒ»²½µÄ´¦Àí£¬ÈçÉ¾³ıÄ³Ğ©ĞĞ¡¢Ìæ»»NAÖµµÈ¡£
+                                        # ä½¿ç”¨`samtools`æŸ¥çœ‹å¹¶è¿‡æ»¤bamæ–‡ä»¶ï¼Œç„¶åä½¿ç”¨`SAM2TSV`å°†å…¶è½¬æ¢ä¸ºtsvæ ¼å¼ã€‚æ¥ç€ï¼Œä½¿ç”¨`awk`å‘½ä»¤è¿›è¡Œè¿›ä¸€æ­¥çš„å¤„ç†ï¼Œå¦‚åˆ é™¤æŸäº›è¡Œã€æ›¿æ¢NAå€¼ç­‰ã€‚
 
-mv $final -t $ftdir                     # ½«×îÖÕµÄtsvÎÄ¼şÒÆ¶¯µ½Ô­Ê¼ÌØÕ÷µÄÄ¿Â¼¡£
+mv $final -t $ftdir                     # å°†æœ€ç»ˆçš„tsvæ–‡ä»¶ç§»åŠ¨åˆ°åŸå§‹ç‰¹å¾çš„ç›®å½•ã€‚
 #
 ###
 #####
 #######
-#########¶ÔÓÚs2.Combine_raw_nnpl.sh
+#########å¯¹äºs2.Combine_raw_nnpl.sh
 #######
 #####
 ###
-#Õâ¸ö½Å±¾µÄÄ¿µÄÊÇ´¦ÀínanopolishµÄÊä³öÎÄ¼ş¡£
-#Ëü½«ÎÄ¼ş·Ö³É¶à¸ö¿é£¬²¢Ê¹ÓÃR½Å±¾´¦ÀíÃ¿¸ö¿é¡£´¦ÀíºóµÄ¿é»á±»ºÏ²¢³ÉÒ»¸öÊä³öÎÄ¼ş£¬²¢±£´æÔÚÒ»¸öÌØ¶¨µÄÄ¿Â¼ÖĞ¡£
-#!/bin/bash                           # Ö¸¶¨½Å±¾Ê¹ÓÃµÄ½âÊÍÆ÷Îªbash¡£
+#è¿™ä¸ªè„šæœ¬çš„ç›®çš„æ˜¯å¤„ç†nanopolishçš„è¾“å‡ºæ–‡ä»¶ã€‚
+#å®ƒå°†æ–‡ä»¶åˆ†æˆå¤šä¸ªå—ï¼Œå¹¶ä½¿ç”¨Rè„šæœ¬å¤„ç†æ¯ä¸ªå—ã€‚å¤„ç†åçš„å—ä¼šè¢«åˆå¹¶æˆä¸€ä¸ªè¾“å‡ºæ–‡ä»¶ï¼Œå¹¶ä¿å­˜åœ¨ä¸€ä¸ªç‰¹å®šçš„ç›®å½•ä¸­ã€‚
+#!/bin/bash                           # æŒ‡å®šè„šæœ¬ä½¿ç”¨çš„è§£é‡Šå™¨ä¸ºbashã€‚
 
-npdir=$1                               # ¶¨ÒånanopolishµÄÄ¿Â¼¡£
-expt=$2                                # ¶¨ÒåÊµÑéµÄÃû³Æ¡£
-exptdir=$3                             # ¶¨ÒåÊµÑéµÄÄ¿Â¼¡£
-numcore=$4                             # ¶¨ÒåÒªÊ¹ÓÃµÄºËĞÄÊı¡£
+npdir=$1                               # å®šä¹‰nanopolishçš„ç›®å½•ã€‚
+expt=$2                                # å®šä¹‰å®éªŒçš„åç§°ã€‚
+exptdir=$3                             # å®šä¹‰å®éªŒçš„ç›®å½•ã€‚
+numcore=$4                             # å®šä¹‰è¦ä½¿ç”¨çš„æ ¸å¿ƒæ•°ã€‚
 
-codedir=$(cd `dirname $0` && pwd)      # »ñÈ¡µ±Ç°½Å±¾ËùÔÚµÄÄ¿Â¼¡£
-cd $npdir                              # ÇĞ»»µ½nanopolishµÄÄ¿Â¼¡£
+codedir=$(cd `dirname $0` && pwd)      # è·å–å½“å‰è„šæœ¬æ‰€åœ¨çš„ç›®å½•ã€‚
+cd $npdir                              # åˆ‡æ¢åˆ°nanopolishçš„ç›®å½•ã€‚
 
-rpath=${codedir}/s2.Combine_raw_nanopolish.R   # ¶¨ÒåR½Å±¾µÄÂ·¾¶¡£
-file=${exptdir}/out_nanopolish/${expt}.gm2.nanopolish_eventAlignOut.txt  # ¶¨ÒånanopolishÊä³öÎÄ¼şµÄÂ·¾¶¡£
-head -n 1 $file > raw_nanopolish.header # »ñÈ¡ÎÄ¼şµÄµÚÒ»ĞĞ²¢±£´æÎªheader¡£
-noline=$(wc -l $file | cut -d " " -f 1) # »ñÈ¡ÎÄ¼şµÄ×ÜĞĞÊı¡£
-out=$(echo $file | sed -e "s/.txt/_combined.txt/g") # ¶¨ÒåÊä³öÎÄ¼şµÄÃû³Æ¡£
-tmp=tmp.nnpl                            # ¶¨ÒåÁÙÊ±ÎÄ¼şµÄÃû³Æ¡£
+rpath=${codedir}/s2.Combine_raw_nanopolish.R   # å®šä¹‰Rè„šæœ¬çš„è·¯å¾„ã€‚
+file=${exptdir}/out_nanopolish/${expt}.gm2.nanopolish_eventAlignOut.txt  # å®šä¹‰nanopolishè¾“å‡ºæ–‡ä»¶çš„è·¯å¾„ã€‚
+head -n 1 $file > raw_nanopolish.header # è·å–æ–‡ä»¶çš„ç¬¬ä¸€è¡Œå¹¶ä¿å­˜ä¸ºheaderã€‚
+noline=$(wc -l $file | cut -d " " -f 1) # è·å–æ–‡ä»¶çš„æ€»è¡Œæ•°ã€‚
+out=$(echo $file | sed -e "s/.txt/_combined.txt/g") # å®šä¹‰è¾“å‡ºæ–‡ä»¶çš„åç§°ã€‚
+tmp=tmp.nnpl                            # å®šä¹‰ä¸´æ—¶æ–‡ä»¶çš„åç§°ã€‚
 
-echo $file                              # ´òÓ¡ÎÄ¼şÂ·¾¶¡£
-echo $noline                            # ´òÓ¡ÎÄ¼şµÄ×ÜĞĞÊı¡£
-echo $out                               # ´òÓ¡Êä³öÎÄ¼şµÄÃû³Æ¡£
+echo $file                              # æ‰“å°æ–‡ä»¶è·¯å¾„ã€‚
+echo $noline                            # æ‰“å°æ–‡ä»¶çš„æ€»è¡Œæ•°ã€‚
+echo $out                               # æ‰“å°è¾“å‡ºæ–‡ä»¶çš„åç§°ã€‚
 
-num=2                                   # ³õÊ¼»¯ĞĞÊıÎª2¡£
-chunk=10000000                          # ¶¨ÒåÃ¿¸ö¿éµÄĞĞÊı¡£
-num1=$(expr $num + $chunk)              # ¼ÆËã½áÊøĞĞÊı¡£
-num2=$(expr $num1 + 1)                  # ¼ÆËãÏÂÒ»¸ö¿ªÊ¼ĞĞÊı¡£
-filecount=1                             # ³õÊ¼»¯ÎÄ¼ş¼ÆÊıÎª1¡£
+num=2                                   # åˆå§‹åŒ–è¡Œæ•°ä¸º2ã€‚
+chunk=10000000                          # å®šä¹‰æ¯ä¸ªå—çš„è¡Œæ•°ã€‚
+num1=$(expr $num + $chunk)              # è®¡ç®—ç»“æŸè¡Œæ•°ã€‚
+num2=$(expr $num1 + 1)                  # è®¡ç®—ä¸‹ä¸€ä¸ªå¼€å§‹è¡Œæ•°ã€‚
+filecount=1                             # åˆå§‹åŒ–æ–‡ä»¶è®¡æ•°ä¸º1ã€‚
 
-while [ $num -le $noline ]              # µ±¿ªÊ¼ĞĞÊıĞ¡ÓÚ»òµÈÓÚ×ÜĞĞÊıÊ±Ñ­»·¡£
+while [ $num -le $noline ]              # å½“å¼€å§‹è¡Œæ•°å°äºæˆ–ç­‰äºæ€»è¡Œæ•°æ—¶å¾ªç¯ã€‚
 do
-	sed -n "$num,${num1}p; ${num2}q" $file > $tmp  # »ñÈ¡ÎÄ¼şµÄÖ¸¶¨ĞĞÊı²¢±£´æµ½ÁÙÊ±ÎÄ¼ş¡£
-	chk=$(wc -l $tmp | cut -f 1 -d " ")  # »ñÈ¡ÁÙÊ±ÎÄ¼şµÄĞĞÊı¡£
-	echo Processing reads $num to $num1 in file $filecount  # ´òÓ¡ÕıÔÚ´¦ÀíµÄĞĞÊıºÍÎÄ¼ş¼ÆÊı¡£
+	sed -n "$num,${num1}p; ${num2}q" $file > $tmp  # è·å–æ–‡ä»¶çš„æŒ‡å®šè¡Œæ•°å¹¶ä¿å­˜åˆ°ä¸´æ—¶æ–‡ä»¶ã€‚
+	chk=$(wc -l $tmp | cut -f 1 -d " ")  # è·å–ä¸´æ—¶æ–‡ä»¶çš„è¡Œæ•°ã€‚
+	echo Processing reads $num to $num1 in file $filecount  # æ‰“å°æ­£åœ¨å¤„ç†çš„è¡Œæ•°å’Œæ–‡ä»¶è®¡æ•°ã€‚
 
-	if [ $chk -gt 0 ]; then              # Èç¹ûÁÙÊ±ÎÄ¼şµÄĞĞÊı´óÓÚ0¡£
-		Rscript $rpath -f $tmp -t $numcore -o ${out}.part${filecount} -s $noline -n $num -c $chunk  # ÔËĞĞR½Å±¾´¦ÀíÁÙÊ±ÎÄ¼ş¡£
+	if [ $chk -gt 0 ]; then              # å¦‚æœä¸´æ—¶æ–‡ä»¶çš„è¡Œæ•°å¤§äº0ã€‚
+		Rscript $rpath -f $tmp -t $numcore -o ${out}.part${filecount} -s $noline -n $num -c $chunk  # è¿è¡ŒRè„šæœ¬å¤„ç†ä¸´æ—¶æ–‡ä»¶ã€‚
 		
-		if test -f tmp.eli; then         # Èç¹û´æÔÚtmp.eliÎÄ¼ş¡£
-			eli=$(cat tmp.eli)          # »ñÈ¡tmp.eliÎÄ¼şµÄÄÚÈİ¡£
-			rm tmp.eli                  # É¾³ıtmp.eliÎÄ¼ş¡£
+		if test -f tmp.eli; then         # å¦‚æœå­˜åœ¨tmp.eliæ–‡ä»¶ã€‚
+			eli=$(cat tmp.eli)          # è·å–tmp.eliæ–‡ä»¶çš„å†…å®¹ã€‚
+			rm tmp.eli                  # åˆ é™¤tmp.eliæ–‡ä»¶ã€‚
 		else
-			eli=0                       # ·ñÔòÉèÖÃeliÎª0¡£
+			eli=0                       # å¦åˆ™è®¾ç½®eliä¸º0ã€‚
 		fi
 				
 	fi
-	num=$(( $num1 - $eli + 1 ))          # ¸üĞÂ¿ªÊ¼ĞĞÊı¡£
-	num1=$(expr $num + $chunk)           # ¸üĞÂ½áÊøĞĞÊı¡£
-	num2=$(expr $num1 + 1)               # ¸üĞÂÏÂÒ»¸ö¿ªÊ¼ĞĞÊı¡£
-	filecount=$(expr $filecount + 1)     # ¸üĞÂÎÄ¼ş¼ÆÊı¡£
+	num=$(( $num1 - $eli + 1 ))          # æ›´æ–°å¼€å§‹è¡Œæ•°ã€‚
+	num1=$(expr $num + $chunk)           # æ›´æ–°ç»“æŸè¡Œæ•°ã€‚
+	num2=$(expr $num1 + 1)               # æ›´æ–°ä¸‹ä¸€ä¸ªå¼€å§‹è¡Œæ•°ã€‚
+	filecount=$(expr $filecount + 1)     # æ›´æ–°æ–‡ä»¶è®¡æ•°ã€‚
 
 done
-cat ${codedir}/misc/nnpl.header > $out  # ½«headerÄÚÈİĞ´ÈëÊä³öÎÄ¼ş¡£
-cat ${out}.part* | grep -v contig >> $out  # ½«ËùÓĞpartÎÄ¼şµÄÄÚÈİ×·¼Óµ½Êä³öÎÄ¼ş¡£
-rm tmp.nnpl ${out}.part*                # É¾³ıÁÙÊ±ÎÄ¼şºÍËùÓĞpartÎÄ¼ş¡£
-ftdir=${exptdir}/raw_features           # ¶¨ÒåÌØÕ÷µÄÄ¿Â¼¡£
-mv $out -t $ftdir                       # ½«Êä³öÎÄ¼şÒÆ¶¯µ½ÌØÕ÷µÄÄ¿Â¼¡£
+cat ${codedir}/misc/nnpl.header > $out  # å°†headerå†…å®¹å†™å…¥è¾“å‡ºæ–‡ä»¶ã€‚
+cat ${out}.part* | grep -v contig >> $out  # å°†æ‰€æœ‰partæ–‡ä»¶çš„å†…å®¹è¿½åŠ åˆ°è¾“å‡ºæ–‡ä»¶ã€‚
+rm tmp.nnpl ${out}.part*                # åˆ é™¤ä¸´æ—¶æ–‡ä»¶å’Œæ‰€æœ‰partæ–‡ä»¶ã€‚
+ftdir=${exptdir}/raw_features           # å®šä¹‰ç‰¹å¾çš„ç›®å½•ã€‚
+mv $out -t $ftdir                       # å°†è¾“å‡ºæ–‡ä»¶ç§»åŠ¨åˆ°ç‰¹å¾çš„ç›®å½•ã€‚
 
 
 
@@ -328,37 +330,37 @@ mv $out -t $ftdir                       # ½«Êä³öÎÄ¼şÒÆ¶¯µ½ÌØÕ÷µÄÄ¿Â¼¡£
 ########################
 ##################
 ####### S3.Generate_raw_features.sh
-#Õâ¸ö½Å±¾µÄÄ¿µÄÊÇ´Ó´¦ÀíºóµÄTSVºÍnanopolishÊä³öÖĞÌáÈ¡ÌØÕ÷£¬²¢Éú³ÉÒ»¸öÌØÕ÷±í¡£
-#Ê×ÏÈ£¬ËüÌáÈ¡ÁËTSVºÍnanopolishÎÄ¼şÖĞµÄ¹«¹²reads¡£È»ºó£¬Ëü·Ö¿é´¦ÀíÕâĞ©reads£¬Ê¹ÓÃR½Å±¾´ÓÕâĞ©readsÖĞÌáÈ¡ÌØÕ÷£¬²¢½«ÕâĞ©ÌØÕ÷±£´æµ½²¿·ÖÎÄ¼şÖĞ¡£
-#×îºó£¬ËüºÏ²¢ËùÓĞ²¿·ÖÎÄ¼şµ½Ò»¸ö×îÖÕµÄÌØÕ÷ÎÄ¼ş£¬²¢½«ÆäÒÆ¶¯µ½Ò»¸ö¾ÛºÏÄ¿Â¼ÖĞ¡£
+#è¿™ä¸ªè„šæœ¬çš„ç›®çš„æ˜¯ä»å¤„ç†åçš„TSVå’Œnanopolishè¾“å‡ºä¸­æå–ç‰¹å¾ï¼Œå¹¶ç”Ÿæˆä¸€ä¸ªç‰¹å¾è¡¨ã€‚
+#é¦–å…ˆï¼Œå®ƒæå–äº†TSVå’Œnanopolishæ–‡ä»¶ä¸­çš„å…¬å…±readsã€‚ç„¶åï¼Œå®ƒåˆ†å—å¤„ç†è¿™äº›readsï¼Œä½¿ç”¨Rè„šæœ¬ä»è¿™äº›readsä¸­æå–ç‰¹å¾ï¼Œå¹¶å°†è¿™äº›ç‰¹å¾ä¿å­˜åˆ°éƒ¨åˆ†æ–‡ä»¶ä¸­ã€‚
+#æœ€åï¼Œå®ƒåˆå¹¶æ‰€æœ‰éƒ¨åˆ†æ–‡ä»¶åˆ°ä¸€ä¸ªæœ€ç»ˆçš„ç‰¹å¾æ–‡ä»¶ï¼Œå¹¶å°†å…¶ç§»åŠ¨åˆ°ä¸€ä¸ªèšåˆç›®å½•ä¸­ã€‚
 
 #!/bin/bash
 
-# ¶¨ÒåÊäÈë²ÎÊı
-exptdir=$1   # ÊµÑéÄ¿Â¼
-numcore=$2   # Ê¹ÓÃµÄºËĞÄÊı
-agggrp=$3    # ¾ÛºÏ×é
+# å®šä¹‰è¾“å…¥å‚æ•°
+exptdir=$1   # å®éªŒç›®å½•
+numcore=$2   # ä½¿ç”¨çš„æ ¸å¿ƒæ•°
+agggrp=$3    # èšåˆç»„
 
-# »ñÈ¡µ±Ç°½Å±¾µÄÄ¿Â¼
+# è·å–å½“å‰è„šæœ¬çš„ç›®å½•
 codedir=$(cd `dirname $0` && pwd)
 
-# ¶¨ÒåR½Å±¾µÄÂ·¾¶
+# å®šä¹‰Rè„šæœ¬çš„è·¯å¾„
 rpath=${codedir}/s3.Generate_raw_feature_table.R
 
-# »ñÈ¡ÊµÑéÄ¿Â¼µÄ»ù±¾Ãû³Æ
+# è·å–å®éªŒç›®å½•çš„åŸºæœ¬åç§°
 expt=$(basename ${exptdir})
 
-# ¶¨ÒåÌØÕ÷Ä¿Â¼
+# å®šä¹‰ç‰¹å¾ç›®å½•
 ftdir=${exptdir}/raw_features
 
-# ÇĞ»»µ½ÌØÕ÷Ä¿Â¼
+# åˆ‡æ¢åˆ°ç‰¹å¾ç›®å½•
 cd $ftdir
 
-# ´òÓ¡¿ªÊ¼ĞÅÏ¢
+# æ‰“å°å¼€å§‹ä¿¡æ¯
 echo =========================================================================================
 echo "S3 Start: $(date)"
 
-# ¶¨Òå±äÁ¿Ãû³Æ
+# å®šä¹‰å˜é‡åç§°
 nnpl=$expt.gm2.nanopolish_eventAlignOut_combined.txt
 tsv=${expt}.tsv.txt
 outname=${expt}.tsv_nnpl_inAE.txt
@@ -368,12 +370,12 @@ readtsv=${expt}.read.tsv
 readnnpl=${expt}.read.nnpl
 interread=${expt}.intersect.read
 
-# ²½Öè1 - ´ÓtsvºÍnanopolishÎÄ¼şÖĞÌáÈ¡¹«¹²µÄreads
+# æ­¥éª¤1 - ä»tsvå’Œnanopolishæ–‡ä»¶ä¸­æå–å…¬å…±çš„reads
 awk 'NR!=1 {print $1}' $tsv | LC_ALL=C uniq | LC_ALL=C sort -S 80% --parallel=$numcore  > $readtsv
 awk '{print $2}' $nnpl | LC_ALL=C uniq | LC_ALL=C sort -S 80% --parallel=$numcore  > $readnnpl
 comm -12 $readtsv $readnnpl > $interread
 
-# ¶¨ÒåÑ­»·±äÁ¿
+# å®šä¹‰å¾ªç¯å˜é‡
 num=1
 chunk=100000
 num1=$(expr $num + $chunk - 1)
@@ -381,116 +383,116 @@ num2=$(expr $num1 + 1)
 noline=$(wc -l $interread | cut -d " " -f 1)
 filecount=1
 
-# Ñ­»·´¦ÀíÃ¿¸öread¿é
+# å¾ªç¯å¤„ç†æ¯ä¸ªreadå—
 while [ $num -le $noline ]
 do
-    # ´òÓ¡´¦ÀíĞÅÏ¢
+    # æ‰“å°å¤„ç†ä¿¡æ¯
     echo Processing reads $num to $num1
 
-    # ´Ó½»¼¯ÎÄ¼şÖĞÌáÈ¡µ±Ç°¿éµÄreads
+    # ä»äº¤é›†æ–‡ä»¶ä¸­æå–å½“å‰å—çš„reads
     sed -n "$num,${num1}p; ${num2}q" $interread > readstmp
     chk=$(wc -l readstmp | cut -f 1 -d " ")
 
-    # Èç¹ûµ±Ç°¿éÓĞreads£¬Ôò½øĞĞ´¦Àí
+    # å¦‚æœå½“å‰å—æœ‰readsï¼Œåˆ™è¿›è¡Œå¤„ç†
     if [ $chk -gt 0 ]; then
-        # Ìí¼ÓÍ·²¿ĞÅÏ¢
+        # æ·»åŠ å¤´éƒ¨ä¿¡æ¯
         cat ${codedir}/misc/nnpl.header > $innnpl
         cat ${codedir}/misc/tsv.header > $intsv
 
-        # ´ÓtsvºÍnnplÎÄ¼şÖĞÌáÈ¡µ±Ç°¿éµÄreads
+        # ä»tsvå’Œnnplæ–‡ä»¶ä¸­æå–å½“å‰å—çš„reads
         LC_ALL=C grep -h -F -w -f readstmp $tsv >> $intsv
         LC_ALL=C grep -h -F -w -f readstmp $nnpl >> $innnpl
 
-        # ²½Öè2 - Éú³ÉÔ­Ê¼ÌØÕ÷ÎÄ¼ş
+        # æ­¥éª¤2 - ç”ŸæˆåŸå§‹ç‰¹å¾æ–‡ä»¶
         Rscript $rpath -n $innnpl -t $intsv -o ${outname}.part$filecount
 
-        # ¸üĞÂÑ­»·±äÁ¿
+        # æ›´æ–°å¾ªç¯å˜é‡
         num=$num2
         num1=$(expr $num + $chunk - 1)
         num2=$(expr $num1 + 1)
         filecount=$(expr $filecount + 1)
 
-        # É¾³ıÁÙÊ±ÎÄ¼ş
+        # åˆ é™¤ä¸´æ—¶æ–‡ä»¶
         rm readstmp
     fi
 done
 
-# ºÏ²¢ËùÓĞ²¿·ÖÎÄ¼şµ½×îÖÕµÄÌØÕ÷ÎÄ¼ş
+# åˆå¹¶æ‰€æœ‰éƒ¨åˆ†æ–‡ä»¶åˆ°æœ€ç»ˆçš„ç‰¹å¾æ–‡ä»¶
 cat ${codedir}/misc/inae.header > $outname
 cat ${outname}.part*.positive | LC_ALL=C sort -k1,1 -k3,3n | grep -v contig >> $outname
 cat ${outname}.part*.negative | LC_ALL=C sort -k1,1 -k3,3n | grep -v contig >> $outname
 
-# ´òÓ¡Éú³ÉĞÅÏ¢
+# æ‰“å°ç”Ÿæˆä¿¡æ¯
 echo ${outname} generated on $(date)
 
-# É¾³ıÁÙÊ±ÎÄ¼ş
+# åˆ é™¤ä¸´æ—¶æ–‡ä»¶
 rm $readtsv $readnnpl $interread $intsv $innnpl ${outname}.part*.positive ${outname}.part*.negative
 
-# ´´½¨¾ÛºÏÄ¿Â¼²¢ÒÆ¶¯×îÖÕµÄÌØÕ÷ÎÄ¼ş
+# åˆ›å»ºèšåˆç›®å½•å¹¶ç§»åŠ¨æœ€ç»ˆçš„ç‰¹å¾æ–‡ä»¶
 aggdir=$(dirname $exptdir)/aggregate_reads
 mkdir $aggdir
 mv $outname ${outname}_grp${agggrp}
 mv ${outname}_grp${agggrp} -t $aggdir
 
-# ´òÓ¡½áÊøĞÅÏ¢
+# æ‰“å°ç»“æŸä¿¡æ¯
 echo -e S3 End: $(date) "\n"
 echo =========================================================================================
 
 
 
-######################################################## ÕâÈı¸ö¹ı³ÌµÄ×Ü½á
+######################################################## è¿™ä¸‰ä¸ªè¿‡ç¨‹çš„æ€»ç»“
 ########################################################
 ########################################################
 ########################################################
 1. Basecalling (S1.Basecall_map_nanopolish.sh)
-- ×÷ÓÃ: ½«Ô­Ê¼µÄµçĞÅºÅÊı¾İ£¨fast5ÎÄ¼ş£©×ª»»ÎªDNAĞòÁĞ£¨fastqÎÄ¼ş£©¡£
-- Èí¼ş: guppy_basecaller
-- ÊäÈëÎÄ¼ş:
-fast5ÎÄ¼ş£º°üº¬Ô­Ê¼µÄµçĞÅºÅÊı¾İ¡£
-- Éú³ÉµÄÎÄ¼ş:
-fastqÎÄ¼ş£º°üº¬DNAĞòÁĞ¼°Æä¶ÔÓ¦µÄÖÊÁ¿·ÖÊı¡£
-combined.fastq£ºËùÓĞfastqÎÄ¼şµÄ¼¯ºÏ¡£
+- ä½œç”¨: å°†åŸå§‹çš„ç”µä¿¡å·æ•°æ®ï¼ˆfast5æ–‡ä»¶ï¼‰è½¬æ¢ä¸ºDNAåºåˆ—ï¼ˆfastqæ–‡ä»¶ï¼‰ã€‚
+- è½¯ä»¶: guppy_basecaller
+- è¾“å…¥æ–‡ä»¶:
+fast5æ–‡ä»¶ï¼šåŒ…å«åŸå§‹çš„ç”µä¿¡å·æ•°æ®ã€‚
+- ç”Ÿæˆçš„æ–‡ä»¶:
+fastqæ–‡ä»¶ï¼šåŒ…å«DNAåºåˆ—åŠå…¶å¯¹åº”çš„è´¨é‡åˆ†æ•°ã€‚
+combined.fastqï¼šæ‰€æœ‰fastqæ–‡ä»¶çš„é›†åˆã€‚
 
 2. Mapping (S1.Basecall_map_nanopolish.sh)
-- ×÷ÓÃ: ½«basecalledµÄDNAĞòÁĞÓ³Éäµ½Ò»¸ö²Î¿¼»ùÒò×é¡£
-- Èí¼ş: graphmap2£¨¿ÉÌæ»»Îªminimap2£©
-- ÊäÈëÎÄ¼ş:
-combined.fastq£ºËùÓĞfastqÎÄ¼şµÄ¼¯ºÏ¡£
-ref£º²Î¿¼»ùÒò×éÎÄ¼ş¡£
-- Éú³ÉµÄÎÄ¼ş:
-SAMÎÄ¼ş£º°üº¬Ó³ÉäĞÅÏ¢µÄÎÄ±¾ÎÄ¼ş¡£
-sorted.bam£ºÅÅĞòºóµÄ¶ş½øÖÆ°æ±¾µÄSAMÎÄ¼ş£¬ÓÃÓÚºóĞø·ÖÎö¡£
+- ä½œç”¨: å°†basecalledçš„DNAåºåˆ—æ˜ å°„åˆ°ä¸€ä¸ªå‚è€ƒåŸºå› ç»„ã€‚
+- è½¯ä»¶: graphmap2ï¼ˆå¯æ›¿æ¢ä¸ºminimap2ï¼‰
+- è¾“å…¥æ–‡ä»¶:
+combined.fastqï¼šæ‰€æœ‰fastqæ–‡ä»¶çš„é›†åˆã€‚
+refï¼šå‚è€ƒåŸºå› ç»„æ–‡ä»¶ã€‚
+- ç”Ÿæˆçš„æ–‡ä»¶:
+SAMæ–‡ä»¶ï¼šåŒ…å«æ˜ å°„ä¿¡æ¯çš„æ–‡æœ¬æ–‡ä»¶ã€‚
+sorted.bamï¼šæ’åºåçš„äºŒè¿›åˆ¶ç‰ˆæœ¬çš„SAMæ–‡ä»¶ï¼Œç”¨äºåç»­åˆ†æã€‚
 
 3. Nanopolish (S1.Basecall_map_nanopolish.sh)
-- ×÷ÓÃ: Ê¹ÓÃnanopolish¶ÔÆëÔ­Ê¼µçĞÅºÅÊÂ¼şÓë²Î¿¼»ùÒò×é¡£
-- Èí¼ş: nanopolish
-- ÊäÈëÎÄ¼ş:
-sorted.bam£ºÅÅĞòºóµÄ¶ş½øÖÆ°æ±¾µÄSAMÎÄ¼ş¡£
-ref£º²Î¿¼»ùÒò×éÎÄ¼ş¡£
-- Éú³ÉµÄÎÄ¼ş:
-nanopolish_eventAlignOut.txt£º°üº¬nanopolishµÄÊä³ö£¬ÃèÊöÁËÃ¿¸öÊÂ¼şÓë²Î¿¼»ùÒò×éµÄ¶ÔÆë¡£
+- ä½œç”¨: ä½¿ç”¨nanopolishå¯¹é½åŸå§‹ç”µä¿¡å·äº‹ä»¶ä¸å‚è€ƒåŸºå› ç»„ã€‚
+- è½¯ä»¶: nanopolish
+- è¾“å…¥æ–‡ä»¶:
+sorted.bamï¼šæ’åºåçš„äºŒè¿›åˆ¶ç‰ˆæœ¬çš„SAMæ–‡ä»¶ã€‚
+refï¼šå‚è€ƒåŸºå› ç»„æ–‡ä»¶ã€‚
+- ç”Ÿæˆçš„æ–‡ä»¶:
+nanopolish_eventAlignOut.txtï¼šåŒ…å«nanopolishçš„è¾“å‡ºï¼Œæè¿°äº†æ¯ä¸ªäº‹ä»¶ä¸å‚è€ƒåŸºå› ç»„çš„å¯¹é½ã€‚
 
 4. Processing BAM and Nanopolish outputs (S2.Process_bam_nnpl.sh)
-- ×÷ÓÃ: ×ª»»BAMÎÄ¼şÎªTSV¸ñÊ½£¬²¢´¦ÀínanopolishµÄÊä³ö¡£
-- Èí¼ş: sam2tsv, R½Å±¾
-- ÊäÈëÎÄ¼ş:
-sorted.bam£ºÅÅĞòºóµÄ¶ş½øÖÆ°æ±¾µÄSAMÎÄ¼ş¡£
-nanopolish_eventAlignOut.txt£ºnanopolishµÄÊä³ö¡£
-- Éú³ÉµÄÎÄ¼ş:
-tsv.txt£º´ÓBAMÎÄ¼ş×ª»»µÃµ½µÄTSVÎÄ¼ş¡£
-nanopolish_eventAlignOut_combined.txt£º´¦ÀíºóµÄnanopolishÊä³ö¡£
+- ä½œç”¨: è½¬æ¢BAMæ–‡ä»¶ä¸ºTSVæ ¼å¼ï¼Œå¹¶å¤„ç†nanopolishçš„è¾“å‡ºã€‚
+- è½¯ä»¶: sam2tsv, Rè„šæœ¬
+- è¾“å…¥æ–‡ä»¶:
+sorted.bamï¼šæ’åºåçš„äºŒè¿›åˆ¶ç‰ˆæœ¬çš„SAMæ–‡ä»¶ã€‚
+nanopolish_eventAlignOut.txtï¼šnanopolishçš„è¾“å‡ºã€‚
+- ç”Ÿæˆçš„æ–‡ä»¶:
+tsv.txtï¼šä»BAMæ–‡ä»¶è½¬æ¢å¾—åˆ°çš„TSVæ–‡ä»¶ã€‚
+nanopolish_eventAlignOut_combined.txtï¼šå¤„ç†åçš„nanopolishè¾“å‡ºã€‚
 
 5. Feature Generation (S3.Generate_raw_features.sh)
-- ×÷ÓÃ: ´Ó´¦ÀíºóµÄTSVºÍnanopolishÊä³öÖĞÌáÈ¡ÌØÕ÷¡£
-- Èí¼ş: R½Å±¾
-- ÊäÈëÎÄ¼ş:
-tsv.txt£º´ÓBAMÎÄ¼ş×ª»»µÃµ½µÄTSVÎÄ¼ş¡£
-nanopolish_eventAlignOut_combined.txt£º´¦ÀíºóµÄnanopolishÊä³ö¡£
-- Éú³ÉµÄÎÄ¼ş:
-tsv_nnpl_inAE.txt£º°üº¬´ÓTSVºÍnanopolishÊä³öÖĞÌáÈ¡µÄÔ­Ê¼ÌØÕ÷µÄÎÄ¼ş¡£
+- ä½œç”¨: ä»å¤„ç†åçš„TSVå’Œnanopolishè¾“å‡ºä¸­æå–ç‰¹å¾ã€‚
+- è½¯ä»¶: Rè„šæœ¬
+- è¾“å…¥æ–‡ä»¶:
+tsv.txtï¼šä»BAMæ–‡ä»¶è½¬æ¢å¾—åˆ°çš„TSVæ–‡ä»¶ã€‚
+nanopolish_eventAlignOut_combined.txtï¼šå¤„ç†åçš„nanopolishè¾“å‡ºã€‚
+- ç”Ÿæˆçš„æ–‡ä»¶:
+tsv_nnpl_inAE.txtï¼šåŒ…å«ä»TSVå’Œnanopolishè¾“å‡ºä¸­æå–çš„åŸå§‹ç‰¹å¾çš„æ–‡ä»¶ã€‚
 
-½á¹¹ÉÏ£¬fastqÎÄ¼ş°üº¬DNAĞòÁĞ¼°Æä¶ÔÓ¦µÄÖÊÁ¿·ÖÊı£»SAMºÍBAMÎÄ¼ş°üº¬¹ØÓÚÈçºÎ½«DNAĞòÁĞÓ³Éäµ½²Î¿¼»ùÒò×éµÄĞÅÏ¢£»
-TSVÎÄ¼şÊÇBAMÎÄ¼şµÄÎÄ±¾±íÊ¾£¬¶ønanopolishµÄÊä³öÃèÊöÁËÃ¿¸öÊÂ¼şÓë²Î¿¼»ùÒò×éµÄ¶ÔÆë£»×îºó£¬tsv_nnpl_inAE.txtÎÄ¼ş°üº¬´ÓÇ°ÃæµÄ²½ÖèÖĞÌáÈ¡µÄÌØÕ÷¡£
+ç»“æ„ä¸Šï¼Œfastqæ–‡ä»¶åŒ…å«DNAåºåˆ—åŠå…¶å¯¹åº”çš„è´¨é‡åˆ†æ•°ï¼›SAMå’ŒBAMæ–‡ä»¶åŒ…å«å…³äºå¦‚ä½•å°†DNAåºåˆ—æ˜ å°„åˆ°å‚è€ƒåŸºå› ç»„çš„ä¿¡æ¯ï¼›
+TSVæ–‡ä»¶æ˜¯BAMæ–‡ä»¶çš„æ–‡æœ¬è¡¨ç¤ºï¼Œè€Œnanopolishçš„è¾“å‡ºæè¿°äº†æ¯ä¸ªäº‹ä»¶ä¸å‚è€ƒåŸºå› ç»„çš„å¯¹é½ï¼›æœ€åï¼Œtsv_nnpl_inAE.txtæ–‡ä»¶åŒ…å«ä»å‰é¢çš„æ­¥éª¤ä¸­æå–çš„ç‰¹å¾ã€‚
 
-×ÜµÄÀ´Ëµ£¬Õâ¸öÁ÷³Ì´ÓÔ­Ê¼µÄ²âĞòÊı¾İ¿ªÊ¼£¬Í¨¹ıbasecalling¡¢Ó³Éä¡¢nanopolish´¦Àí£¬×îÖÕÉú³ÉÁËÃèÊöDNAĞòÁĞºÍÆäÓë²Î¿¼»ùÒò×éµÄ¶ÔÆëµÄÌØÕ÷¡£ÕâĞ©ÌØÕ÷¿ÉÒÔÓÃÓÚºóĞøµÄ·ÖÎö£¬Èç±äÒì¼ì²â»ò½á¹¹±äÒìµÄÊ¶±ğ¡£
+æ€»çš„æ¥è¯´ï¼Œè¿™ä¸ªæµç¨‹ä»åŸå§‹çš„æµ‹åºæ•°æ®å¼€å§‹ï¼Œé€šè¿‡basecallingã€æ˜ å°„ã€nanopolishå¤„ç†ï¼Œæœ€ç»ˆç”Ÿæˆäº†æè¿°DNAåºåˆ—å’Œå…¶ä¸å‚è€ƒåŸºå› ç»„çš„å¯¹é½çš„ç‰¹å¾ã€‚è¿™äº›ç‰¹å¾å¯ä»¥ç”¨äºåç»­çš„åˆ†æï¼Œå¦‚å˜å¼‚æ£€æµ‹æˆ–ç»“æ„å˜å¼‚çš„è¯†åˆ«ã€‚
 ########################################################
